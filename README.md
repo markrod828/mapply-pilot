@@ -48,6 +48,8 @@ In the side panel:
   on your machine and is attached by autofill only when you have not tailored a version for the job
   you are applying to.
 - **Profile** — contact details, links, work authorization and reusable screening answers.
+- **Settings → Appearance** — optional. The panel follows your computer's light or dark setting
+  unless you pick a side; the sun/moon button in the panel header flips it without leaving the tab.
 - **Settings → Where saved resumes go** — optional. By default a saved PDF lands in
   `Downloads/resumes/{company}/{job title}/{your name}.pdf`. Pick a folder (Documents, say) to file
   them there instead; see [Where resumes are saved](#where-resumes-are-saved).
@@ -73,9 +75,9 @@ In the side panel:
 4. Open the application form. On Greenhouse, Lever, Ashby and Rippling a small **Autofill this
    application** panel appears once the form itself is on the page. On any other site, use
    **Autofill this page** in the side panel and allow the one-time Chrome permission prompt for
-   that host. Filled fields are outlined; still-required fields are listed. Drag the panel by its
-   title bar if it sits over something you need, or press × to hide it — where you leave it is
-   remembered for the next form.
+   that host. Filled fields are outlined; still-required fields are listed. Drag the panel out of
+   the way if it sits over something you need — anywhere on it except its button and its result
+   text — or press × to hide it; where you leave it is remembered for the next form.
 5. Check every field, then submit yourself.
 
 ## How it works
@@ -107,7 +109,11 @@ extension/
 ```
 
 - Job data comes from the page you are already viewing (JSON-LD `JobPosting` when present, otherwise
-  the largest description-like block). No private Jobright APIs are called.
+  the largest description-like block). No private Jobright APIs are called. Because Jobright is a
+  single-page app, two things are guarded: head tags (title, og:title, JSON-LD) are ignored when the
+  canonical URL still points at the posting you came from, and everything read out of the page comes
+  from inside the block the description came from, so the list you clicked through from — still
+  mounted behind the detail — cannot supply the title, company or location.
 - Applying usually redirects to the company's own form on another site. The tailored resume follows:
   autofill attaches the draft stored for whichever job is currently open in the panel, and the panel
   rewrites that PDF whenever the draft changes, so the file on the form matches what you last saw.

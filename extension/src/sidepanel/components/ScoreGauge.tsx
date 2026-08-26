@@ -16,14 +16,8 @@ export function ScoreGauge({ score, size = 84, label }: Props) {
   return (
     <div className="gauge">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`ATS score ${score}`}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#e2e8f0"
-          strokeWidth={stroke}
-        />
+        {/* Track colour comes from CSS so it follows the light/dark theme. */}
+        <circle className="gauge-track" cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}

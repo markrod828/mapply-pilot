@@ -179,6 +179,9 @@ export const DEFAULT_TAILOR_OPTIONS: TailorOptions = {
 
 export type ResumeTemplate = 'classic' | 'modern';
 
+/** 'system' follows the OS; the other two override it. */
+export type Theme = 'system' | 'light' | 'dark';
+
 export interface Settings {
   openaiApiKey: string;
   scoreModel: string;
@@ -192,6 +195,7 @@ export interface Settings {
    * grants access lives in IndexedDB. Empty means save to the Downloads folder.
    */
   saveDirectoryName: string;
+  theme: Theme;
 }
 
 export interface CoverLetter {
@@ -226,6 +230,7 @@ export const DEFAULT_SETTINGS: Settings = {
   answerQuestions: true,
   resumeTemplate: 'classic',
   saveDirectoryName: '',
+  theme: 'system',
 };
 
 export const EMPTY_PROFILE: Profile = {

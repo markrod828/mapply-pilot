@@ -4,60 +4,131 @@ import { runAutofill, type AutofillResult } from './engine';
 const STYLE = `
 :host { all: initial; }
 .panel {
+  /* Same palette as the side panel's dark theme, so the two read as one product. */
+  --surface: #111a2c;
+  --surface-2: #172236;
+  --border: #22304a;
+  --border-strong: #33456a;
+  --text: #e7eefb;
+  --muted: #96a5c0;
+  --faint: #6d7d9b;
+  --accent: #38bdf8;
+  --accent-hover: #7dd3fc;
+  --accent-text: #062435;
+  --accent-ring: rgba(56, 189, 248, 0.35);
+  --warn: #fcd34d;
+
+  user-select: none;
+  /* Let the pointer drag rather than scroll the page under it. */
+  touch-action: none;
   position: fixed;
   right: 18px;
   bottom: 18px;
   z-index: 2147483600;
-  width: 250px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0f172a;
-  color: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
-  padding: 12px;
+  width: 260px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 14px;
+  /* Strong enough to hold an edge against a dark page, where the shadow cannot. */
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.55), 0 2px 10px rgba(2, 6, 23, 0.4),
+    0 0 0 1px rgba(148, 163, 184, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* The title bar is full bleed, so the padding lives on .body instead. */
+  padding: 0;
+  cursor: grab;
+  overflow: hidden;
 }
+.panel:active { cursor: grabbing; }
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  cursor: grab;
-  user-select: none;
-  /* Let the pointer drag rather than scroll the page under it. */
-  touch-action: none;
+  gap: 9px;
+  /* A real title bar: tall enough to grab without aiming. */
+  padding: 9px 10px 9px 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 140ms ease;
 }
-.header:active { cursor: grabbing; }
-.title { font-size: 12px; font-weight: 700; }
-.close {
-  width: auto;
+.header:hover { background: #1c2942; }
+.grip {
   flex: none;
+  width: 10px;
+  height: 16px;
+  color: var(--faint);
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 5px 5px;
+  background-position: center;
+}
+.title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.body { padding: 12px; }
+button {
+  font: inherit;
+  border: 0;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--faint);
   font-size: 16px;
   line-height: 1;
-  padding: 0 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
-.close:hover { background: rgba(148, 163, 184, 0.2); color: #f8fafc; }
-button {
+.close:hover { background: rgba(148, 163, 184, 0.16); color: var(--text); }
+.fill {
   width: 100%;
-  font: inherit;
   font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-  background: #38bdf8;
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
+  font-weight: 650;
+  color: var(--accent-text);
+  background: var(--accent);
+  border-radius: 9px;
+  padding: 9px 12px;
 }
-button:hover { background: #7dd3fc; }
-button:disabled { opacity: 0.6; cursor: default; }
-.status { font-size: 11px; line-height: 1.45; margin-top: 8px; opacity: 0.85; }
-.status ul { margin: 4px 0 0; padding-left: 16px; }
-.warn { color: #fbbf24; }
+.fill:hover:not(:disabled) { background: var(--accent-hover); }
+.fill:active:not(:disabled) { transform: translateY(1px); }
+.fill:disabled { opacity: 0.55; cursor: default; }
+/* Results are worth reading and copying, so this block is not a drag surface. */
+.status {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-top: 10px;
+  color: var(--muted);
+  cursor: auto;
+  user-select: text;
+}
+.status strong { color: var(--text); font-weight: 650; }
+/* Findings read as a list, not one run-on paragraph. */
+.line + .line { margin-top: 6px; }
+.foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--faint);
+}
+.status ul { margin: 4px 0 0; padding-left: 15px; }
+.status li { margin-top: 2px; }
+.status li::marker { color: var(--faint); }
+.warn { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
 `;
 
 let mounted = false;
@@ -79,10 +150,14 @@ export function startAutofillUi(): void {
   const header = document.createElement('div');
   header.className = 'header';
 
+  const grip = document.createElement('div');
+  grip.className = 'grip';
+
   const title = document.createElement('div');
   title.className = 'title';
   title.textContent = 'ApplyPilot';
-  title.title = 'Drag to move';
+
+  header.title = 'Drag to move';
 
   const close = document.createElement('button');
   close.className = 'close';
@@ -95,9 +170,10 @@ export function startAutofillUi(): void {
     mounted = false;
   });
 
-  header.append(title, close);
+  header.append(grip, title, close);
 
   const button = document.createElement('button');
+  button.className = 'fill';
   button.textContent = 'Autofill this application';
 
   const status = document.createElement('div');
@@ -117,11 +193,15 @@ export function startAutofillUi(): void {
     }
   });
 
-  panel.append(header, button, status);
+  const body = document.createElement('div');
+  body.className = 'body';
+  body.append(button, status);
+
+  panel.append(header, body);
   shadow.append(style, panel);
   document.documentElement.appendChild(host);
 
-  makeDraggable(panel, header);
+  makeDraggable(panel);
   void restorePosition(panel);
 }
 
@@ -134,44 +214,47 @@ interface PanelPosition {
   top: number;
 }
 
+/** Anything you can click, type in or read closely is not a drag surface. */
+const CONTROLS = 'button, a, input, textarea, select, .status';
+
 /**
  * The panel sits over the form, so it has to be movable - otherwise it covers the
- * very buttons you are trying to press. Dragging is by the header only, leaving the
- * autofill button and the status text clickable and selectable.
+ * very buttons you are trying to press. The whole panel is the handle, since a thin
+ * title strip is easy to miss; only the controls and the result text are exempt.
  */
-function makeDraggable(panel: HTMLElement, handle: HTMLElement): void {
+function makeDraggable(panel: HTMLElement): void {
   let activePointer: number | null = null;
   let grabX = 0;
   let grabY = 0;
 
-  handle.addEventListener('pointerdown', (event) => {
-    // Left button only, and never start a drag from the close button.
-    if (event.button !== 0 || (event.target as HTMLElement).closest('.close')) return;
+  panel.addEventListener('pointerdown', (event) => {
+    // Left button only, and never start a drag from a control.
+    if (event.button !== 0 || (event.target as HTMLElement).closest(CONTROLS)) return;
 
     const rect = panel.getBoundingClientRect();
     grabX = event.clientX - rect.left;
     grabY = event.clientY - rect.top;
     activePointer = event.pointerId;
-    handle.setPointerCapture(activePointer);
+    panel.setPointerCapture(activePointer);
     // Swap the right/bottom anchoring for explicit coordinates before moving.
     place(panel, rect.left, rect.top);
     event.preventDefault();
   });
 
-  handle.addEventListener('pointermove', (event) => {
+  panel.addEventListener('pointermove', (event) => {
     if (activePointer === null || event.pointerId !== activePointer) return;
     place(panel, event.clientX - grabX, event.clientY - grabY);
   });
 
   const release = (event: PointerEvent) => {
     if (activePointer === null || event.pointerId !== activePointer) return;
-    handle.releasePointerCapture(activePointer);
+    panel.releasePointerCapture(activePointer);
     activePointer = null;
     void savePosition(panel);
   };
 
-  handle.addEventListener('pointerup', release);
-  handle.addEventListener('pointercancel', release);
+  panel.addEventListener('pointerup', release);
+  panel.addEventListener('pointercancel', release);
 
   // A window that shrinks must not strand the panel outside the viewport.
   window.addEventListener('resize', () => {
@@ -279,8 +362,11 @@ function renderResult(result: AutofillResult): string {
     lines.push(`<span class="warn">Still required:</span><ul>${items}</ul>`);
   }
 
-  lines.push('<span class="warn">Check everything, then submit yourself.</span>');
-  return lines.join('<br>');
+  // Divs, not <p>: a <ul> inside a paragraph closes it and strands the markup.
+  return (
+    lines.map((line) => `<div class="line">${line}</div>`).join('') +
+    '<div class="foot">Check everything, then submit yourself.</div>'
+  );
 }
 
 function escapeHtml(value: string): string {

@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react';
 import { TEMPLATES } from '../../lib/resumePdf';
 import { chooseSaveDirectory, clearSaveDirectory, supportsFolderPicker } from '../../lib/saveLocation';
 import { setSettings } from '../../lib/storage';
-import type { ResumeTemplate, Settings } from '../../lib/types';
+import type { ResumeTemplate, Settings, Theme } from '../../lib/types';
 import { useAction } from '../hooks';
+import { applyTheme } from '../theme';
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'];
+
+const THEMES: { id: Theme; label: string }[] = [
+  { id: 'system', label: 'System' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
 
 export function SettingsPanel({ settings }: { settings: Settings }) {
   const { pending, error, run } = useAction();
@@ -29,6 +36,13 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
     const next = { ...draft, saveDirectoryName: name };
     setDraft(next);
     await setSettings(next);
+  };
+
+  const pickTheme = (theme: Theme) => {
+    const next = { ...draft, theme };
+    setDraft(next);
+    applyTheme(theme);
+    void setSettings(next);
   };
 
   const pickFolder = () =>
@@ -117,6 +131,26 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           no basis. Answers are outlined amber on the form — read them before submitting, and expect
           to rewrite any question that asks for your own words.
         </p>
+      </div>
+
+      <div className="card stack">
+        <h2>Appearance</h2>
+        <p className="small muted" style={{ margin: 0 }}>
+          <strong>System</strong> follows your computer's light or dark setting.
+        </p>
+        <div className="segmented" role="group" aria-label="Theme">
+          {THEMES.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              className={draft.theme === option.id ? 'active' : ''}
+              aria-pressed={draft.theme === option.id}
+              onClick={() => pickTheme(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card stack">

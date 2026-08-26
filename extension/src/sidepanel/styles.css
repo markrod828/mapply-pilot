@@ -1,16 +1,149 @@
+/* ==========================================================================
+   ApplyPilot side panel
+   A narrow, tall surface (~320-420px). Everything here is tuned for that:
+   tight rhythm, one accent, hairline borders, depth from layered shadow
+   rather than heavy chrome.
+   ========================================================================== */
+
 :root {
-  --bg: #f8fafc;
-  --panel: #ffffff;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
+  color-scheme: light dark;
+
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #f1f4f8;
+  --surface-3: #e8edf3;
+  --border: #e3e8ef;
+  --border-strong: #cfd7e3;
+
+  --text: #0d1526;
+  --muted: #5f6c85;
+  --faint: #8d99ad;
+
   --accent: #0284c7;
   --accent-hover: #0369a1;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(2, 132, 199, 0.09);
+  /* Opaque twin of --accent-soft, for anything that sits over another element. */
+  --accent-tint: #e0f2fe;
+  --accent-ring: rgba(2, 132, 199, 0.3);
+
   --good: #16a34a;
+  --good-soft: #dcfce7;
+  --good-text: #14532d;
   --warn: #d97706;
+  --warn-soft: #fef3c7;
+  --warn-text: #7c2d12;
   --bad: #dc2626;
-  color-scheme: light;
+  --bad-soft: #fee2e2;
+  --bad-text: #991b1b;
+  --bad-border: #fca5a5;
+  --warn-border: #fcd34d;
+  --info-soft: #e0f2fe;
+  --info-text: #075985;
+  --info-border: #bae6fd;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-full: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(13, 21, 38, 0.05);
+  --shadow-sm: 0 1px 3px rgba(13, 21, 38, 0.07), 0 1px 2px rgba(13, 21, 38, 0.04);
+  --shadow-md: 0 6px 16px rgba(13, 21, 38, 0.09), 0 2px 4px rgba(13, 21, 38, 0.05);
+
+  --t: 140ms cubic-bezier(0.2, 0.6, 0.3, 1);
 }
+
+/* --------------------------------------------------------------------------
+   Dark theme. The panel follows the OS unless the user picks a side in
+   Settings, which stamps data-theme on <html>. Both paths set the same tokens:
+   the media query is guarded so an explicit "Light" beats a dark OS, and the
+   attribute rule comes last so an explicit "Dark" beats a light OS.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0a1120;
+    --surface: #111a2c;
+    --surface-2: #172236;
+    --surface-3: #1f2d45;
+    --border: #22304a;
+    --border-strong: #33456a;
+
+    --text: #e7eefb;
+    --muted: #96a5c0;
+    --faint: #6d7d9b;
+
+    --accent: #38bdf8;
+    --accent-hover: #7dd3fc;
+    --accent-text: #062435;
+    --accent-soft: rgba(56, 189, 248, 0.13);
+    --accent-tint: #10344b;
+    --accent-ring: rgba(56, 189, 248, 0.35);
+
+    --good: #4ade80;
+    --good-soft: rgba(74, 222, 128, 0.15);
+    --good-text: #86efac;
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, 0.15);
+    --warn-text: #fcd34d;
+    --bad: #f87171;
+    --bad-soft: rgba(248, 113, 113, 0.15);
+    --bad-text: #fca5a5;
+    --bad-border: rgba(248, 113, 113, 0.4);
+    --warn-border: rgba(251, 191, 36, 0.4);
+    --info-soft: rgba(56, 189, 248, 0.12);
+    --info-text: #7dd3fc;
+    --info-border: rgba(56, 189, 248, 0.28);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0a1120;
+  --surface: #111a2c;
+  --surface-2: #172236;
+  --surface-3: #1f2d45;
+  --border: #22304a;
+  --border-strong: #33456a;
+
+  --text: #e7eefb;
+  --muted: #96a5c0;
+  --faint: #6d7d9b;
+
+  --accent: #38bdf8;
+  --accent-hover: #7dd3fc;
+  --accent-text: #062435;
+  --accent-soft: rgba(56, 189, 248, 0.13);
+  --accent-tint: #10344b;
+  --accent-ring: rgba(56, 189, 248, 0.35);
+
+  --good: #4ade80;
+  --good-soft: rgba(74, 222, 128, 0.15);
+  --good-text: #86efac;
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.15);
+  --warn-text: #fcd34d;
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, 0.15);
+  --bad-text: #fca5a5;
+  --bad-border: rgba(248, 113, 113, 0.4);
+  --warn-border: rgba(251, 191, 36, 0.4);
+  --info-soft: rgba(56, 189, 248, 0.12);
+  --info-text: #7dd3fc;
+  --info-border: rgba(56, 189, 248, 0.28);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Native controls and scrollbars have to be told too, or they stay light. */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 * {
   box-sizing: border-box;
@@ -20,9 +153,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter var', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -31,73 +166,247 @@ body {
   min-height: 100vh;
 }
 
+/* Numbers that do not shuffle width as scores change. */
+.tabular,
+.gauge-label,
+.coverage strong,
+.bar-label {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Thin, unobtrusive scrollbars inside the panel. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  background-clip: content-box;
+}
+
+/* --------------------------------------------------------------- app bar */
+
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px 0;
+  gap: 9px;
+  padding: 12px 14px 10px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  background: linear-gradient(150deg, var(--accent), var(--accent-hover));
+  box-shadow: var(--shadow-xs);
+}
+
+.brand-mark svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 h1 {
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin: 0;
+  line-height: 1.2;
+}
+
+.brand-text span {
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.3;
 }
 
 h2 {
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin: 0 0 8px;
+  overflow-wrap: break-word;
 }
 
 h3 {
-  font-size: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
   margin: 12px 0 6px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.06em;
+  color: var(--faint);
 }
+
+.theme-toggle {
+  /* Pushed to the far edge of the header, away from the brand block. */
+  margin-left: auto;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* A pill of mutually exclusive choices, sized to its content rather than the column. */
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.segmented button {
+  width: auto;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--t), background var(--t), box-shadow var(--t);
+}
+
+.segmented button:hover:not(.active) {
+  color: var(--text);
+}
+
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+/* -------------------------------------------------------- segmented tabs */
 
 nav {
   display: flex;
-  gap: 4px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  gap: 2px;
+  margin: 0 14px 4px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   position: sticky;
-  top: 0;
-  background: var(--bg);
-  z-index: 2;
+  top: 8px;
+  z-index: 5;
+  backdrop-filter: blur(8px);
 }
 
 nav button {
   flex: 1;
   padding: 6px 8px;
-  font-size: 12px;
+  font: inherit;
+  font-size: 11.5px;
   font-weight: 600;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  border-radius: 7px;
+  border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition: color var(--t), background var(--t), box-shadow var(--t);
+}
+
+nav button:hover:not(.active) {
+  color: var(--text);
 }
 
 nav button.active {
-  background: var(--panel);
-  border-color: var(--border);
+  background: var(--surface);
   color: var(--text);
+  box-shadow: var(--shadow-xs);
 }
 
 main {
   flex: 1;
-  padding: 14px;
+  padding: 10px 14px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
+/* ---------------------------------------------------------------- layout */
+
 .card {
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: var(--r-lg);
+  padding: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The stack's gap already spaces these; their own margin would double it. */
+.stack > h2,
+.stack > h3 {
+  margin: 0;
+}
+
+/* A "Remove" or "Select all" should be the width of its label, not the column. */
+.stack > button.ghost {
+  align-self: flex-start;
 }
 
 .row {
@@ -110,146 +419,20 @@ main {
   flex-wrap: wrap;
 }
 
+/* Let text blocks shrink so a long title cannot push a gauge out of its card. */
+.row > div {
+  min-width: 0;
+}
+
 .grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 3px;
-}
-
-input,
-textarea,
-select {
-  width: 100%;
-  font: inherit;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--text);
-}
-
-textarea {
-  resize: vertical;
-  min-height: 64px;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  outline: 2px solid rgba(2, 132, 199, 0.35);
-  border-color: var(--accent);
-}
-
-button.primary,
-button.secondary,
-button.ghost {
-  font: inherit;
-  font-weight: 600;
-  border-radius: 8px;
-  padding: 7px 12px;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-button.primary {
-  background: var(--accent);
-  color: #fff;
-}
-
-button.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-button.secondary {
-  background: #fff;
-  border-color: var(--border);
-  color: var(--text);
-}
-
-button.secondary:hover:not(:disabled) {
-  background: #f1f5f9;
-}
-
-button.ghost {
-  background: transparent;
-  color: var(--muted);
-  padding: 4px 6px;
-}
-
-button:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.score-hero {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.score-value {
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.score-delta {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--good);
-}
-
-.bar-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 6px;
-}
-
-.bar {
-  height: 6px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  overflow: hidden;
-}
-
-.bar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.chip {
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  color: #334155;
-}
-
-.chip.missing {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.chip.matched {
-  background: #dcfce7;
-  color: #166534;
+.indent {
+  padding-left: 24px;
+  margin-top: 3px;
 }
 
 .muted {
@@ -257,113 +440,255 @@ button:disabled {
 }
 
 .small {
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
-.error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #991b1b;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
-}
+/* ---------------------------------------------------------------- inputs */
 
-.notice {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-ul.notes {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 12px;
+label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
   color: var(--muted);
+  margin-bottom: 4px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  font: inherit;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--t), box-shadow var(--t), background var(--t);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 68px;
+  line-height: 1.55;
+}
+
+input:hover:not(:focus),
+textarea:hover:not(:focus),
+select:hover:not(:focus) {
+  border-color: var(--faint);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
+label.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background var(--t);
+}
+
+label.check:hover {
+  background: var(--surface-2);
+}
+
+label.check input {
+  width: auto;
+  margin-top: 2px;
+  flex: none;
 }
 
 .section-edit {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: var(--r-md);
+  padding: 10px;
+  background: var(--surface-2);
 }
 
+/* --------------------------------------------------------------- buttons */
+
+button.primary,
+button.secondary,
+button.ghost {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--r-md);
+  padding: 8px 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--t), border-color var(--t), color var(--t),
+    box-shadow var(--t), transform var(--t);
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-xs);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+button.secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--faint);
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 8px;
+  font-size: 11.5px;
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+button.primary:active:not(:disabled),
+button.secondary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------- stepper */
+
 .stepper {
-  display: flex;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   list-style: none;
-  margin: 0;
+  margin: 2px 0 0;
   padding: 0;
 }
 
 .step {
-  flex: 1;
+  position: relative;
+}
+
+/* The rail between two steps, coloured up to wherever you have reached. */
+.step + .step::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--border);
+  transition: background var(--t);
+}
+
+.step.done::before,
+.step.active::before {
+  background: var(--accent);
 }
 
 .step button {
+  position: relative;
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
   font: inherit;
-  font-size: 11px;
-  text-align: left;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--muted);
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
   cursor: pointer;
+  transition: color var(--t);
 }
 
 .step button:disabled {
   cursor: default;
-  opacity: 0.6;
 }
 
 .step-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   flex: none;
   border-radius: 50%;
-  background: #e2e8f0;
-  color: #475569;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  color: var(--faint);
+  position: relative;
+  z-index: 1;
   font-weight: 700;
-  font-size: 10px;
-}
-
-.step.active button {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.step.active .step-index,
-.step.done .step-index {
-  background: var(--accent);
-  color: #fff;
+  font-size: 11px;
+  transition: background var(--t), border-color var(--t), color var(--t), box-shadow var(--t);
 }
 
 .step-label {
-  line-height: 1.2;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
 }
+
+.step.done .step-index {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.step.done button {
+  color: var(--muted);
+}
+
+.step.active .step-index {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+.step.active button {
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------- score gauge */
 
 .gauge {
   display: flex;
@@ -372,11 +697,163 @@ ul.notes {
   flex: none;
 }
 
+.gauge-track {
+  stroke: var(--surface-3);
+}
+
 .gauge-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   margin-top: 2px;
 }
+
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 9px;
+  margin-bottom: 4px;
+}
+
+.bar {
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-full);
+  transition: width 420ms cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+
+.coverage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.coverage strong {
+  color: var(--good);
+  font-size: 12.5px;
+}
+
+/* ----------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chip {
+  font-size: 11px;
+  font-weight: 550;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.chip.missing {
+  background: var(--bad-soft);
+  border-color: transparent;
+  color: var(--bad-text);
+}
+
+.chip.matched {
+  background: var(--good-soft);
+  border-color: transparent;
+  color: var(--good-text);
+}
+
+.chip.removable,
+.chip.suggestion {
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+
+.chip.removable:hover:not(:disabled) {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.chip.suggestion {
+  text-align: left;
+  border-radius: var(--r-md);
+  padding: 5px 9px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.chip.suggestion:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* -------------------------------------------------------------- messages */
+
+.error,
+.notice,
+.warning {
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.error {
+  background: var(--bad-soft);
+  border-color: var(--bad-border);
+  color: var(--bad-text);
+}
+
+.notice {
+  background: var(--info-soft);
+  border-color: var(--info-border);
+  color: var(--info-text);
+}
+
+.warning {
+  background: var(--warn-soft);
+  border-color: var(--warn-border);
+  color: var(--warn-text);
+}
+
+ul.notes {
+  margin: 0;
+  padding-left: 17px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+ul.notes li {
+  margin-bottom: 2px;
+}
+
+ul.notes li::marker {
+  color: var(--faint);
+}
+
+/* ------------------------------------------------------- comparison table */
 
 table.compare {
   width: 100%;
@@ -386,36 +863,41 @@ table.compare {
 
 table.compare th {
   text-align: left;
-  font-size: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  padding: 4px 6px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  padding: 0 6px 5px;
   border-bottom: 1px solid var(--border);
 }
 
 table.compare td {
-  padding: 6px;
+  padding: 7px 6px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
 table.compare tr:last-child td {
   border-bottom: 0;
+  padding-bottom: 0;
+}
+
+table.compare td:first-child {
+  font-weight: 600;
 }
 
 .status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  margin-right: 5px;
+  margin-right: 6px;
   font-size: 9px;
   font-weight: 700;
   color: #fff;
-  vertical-align: middle;
+  vertical-align: -2px;
 }
 
 .status.match {
@@ -430,103 +912,76 @@ table.compare tr:last-child td {
   background: var(--bad);
 }
 
-.warning {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
-}
-
-label.check {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-bottom: 0;
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-label.check input {
-  width: auto;
-  margin-top: 2px;
-  flex: none;
-}
-
-.indent {
-  padding-left: 22px;
-  margin-top: 2px;
-}
-
-.chip.removable,
-.chip.suggestion {
-  font: inherit;
-  font-size: 11px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-}
-
-.chip.suggestion {
-  background: #f1f5f9;
-  text-align: left;
-}
-
-.chip.suggestion:hover:not(:disabled) {
-  background: #e2e8f0;
-}
+/* ------------------------------------------------------- template picker */
 
 .template-picker {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 7px;
 }
 
 .template-option {
   text-align: left;
   font: inherit;
-  border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 8px;
-  padding: 7px 9px;
+  /* Buttons do not inherit colour; without this they fall back to the UA's
+     `buttontext`, which ignores the theme and goes dark on a dark panel. */
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 9px 10px;
   cursor: pointer;
+  transition: border-color var(--t), box-shadow var(--t), background var(--t);
+}
+
+.template-option:hover {
+  border-color: var(--faint);
 }
 
 .template-option.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .template-option strong {
   display: block;
   font-size: 12px;
+  margin-bottom: 2px;
 }
 
 .template-option span {
   font-size: 10px;
   color: var(--muted);
-  line-height: 1.3;
+  line-height: 1.35;
+  display: block;
 }
 
+/* ------------------------------------------------------- resume "paper"
+
+   Deliberately stays a white page in dark mode: it is a preview of a printed
+   document, and inverting it would misrepresent what gets sent.
+   ----------------------------------------------------------------------- */
+
 .paper {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px 18px;
-  max-height: 380px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 17px 19px;
+  max-height: 400px;
   overflow: auto;
   color: #0f172a;
+  box-shadow: var(--shadow-sm);
 }
 
 .paper section {
-  margin-top: 10px;
+  margin-top: 11px;
 }
 
 .paper h4 {
   margin: 0 0 4px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .paper p {
@@ -534,8 +989,8 @@ label.check input {
 }
 
 .paper ul {
-  margin: 2px 0 0;
-  padding-left: 14px;
+  margin: 3px 0 0;
+  padding-left: 15px;
 }
 
 .paper li {
@@ -565,37 +1020,13 @@ label.check input {
   padding: 0 2px;
 }
 
-/* A bullet the rewrite dropped entirely, listed under the ones it kept. */
 .paper li.dropped {
   list-style-type: none;
-  margin-left: -14px;
+  margin-left: -15px;
 }
 
 .paper .dropped-section h4 {
   color: #991b1b;
-}
-
-.diff-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.diff-legend ins {
-  background: #bbf7d0;
-  color: #14532d;
-  text-decoration: none;
-  border-radius: 3px;
-  padding: 0 3px;
-}
-
-.diff-legend del {
-  background: #fee2e2;
-  color: #991b1b;
-  border-radius: 3px;
-  padding: 0 3px;
 }
 
 .paper-name {
@@ -617,7 +1048,7 @@ label.check input {
 }
 
 .role {
-  margin-top: 6px;
+  margin-top: 7px;
 }
 
 .role-title {
@@ -668,7 +1099,7 @@ label.check input {
 
 .tpl-modern .paper-header {
   text-align: left;
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 2px solid #0284c7;
   padding-bottom: 6px;
 }
 
@@ -678,7 +1109,7 @@ label.check input {
 }
 
 .tpl-modern .paper-headline {
-  color: var(--accent);
+  color: #0284c7;
   font-weight: 700;
   font-size: 11px;
 }
@@ -689,7 +1120,11 @@ label.check input {
 
 .tpl-modern h4 {
   font-size: 10px;
-  color: var(--accent);
+  color: #0284c7;
+}
+
+.tpl-modern ul {
+  padding-left: 13px;
 }
 
 .tpl-modern li {
@@ -697,49 +1132,43 @@ label.check input {
   position: relative;
 }
 
-.tpl-modern ul {
-  padding-left: 12px;
-}
-
 .tpl-modern li::before {
   content: '–';
   position: absolute;
-  left: -12px;
-  color: var(--accent);
+  left: -13px;
+  color: #0284c7;
 }
 
-.resume-preview {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 1.5;
-  margin: 0;
-  max-height: 340px;
-  overflow: auto;
-  background: #f8fafc;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-}
+/* ----------------------------------------------------------- diff legend */
 
-.coverage {
+.diff-legend {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
-.coverage strong {
-  color: var(--good);
-}
-
-.resume-preview mark {
+.diff-legend ins {
   background: #bbf7d0;
   color: #14532d;
+  text-decoration: none;
   border-radius: 3px;
-  padding: 0 2px;
+  padding: 0 4px;
+  margin-right: 3px;
+}
+
+.diff-legend del {
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

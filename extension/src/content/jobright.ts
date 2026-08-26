@@ -162,7 +162,17 @@ async function scan() {
   // Jobright renders the previous posting's DOM under the new URL for a moment, and
   // the job key comes from the URL, so it cannot tell us the body is stale. Wait for
   // two identical reads instead: scoring once, late, beats scoring twice.
-  const fingerprint = `${job.title}\n${job.description.length}\n${job.description.slice(0, 400)}`;
+  //
+  // The header fields are part of this, not just the description: the title, company
+  // and location render separately from the body, and leaving them out let a read
+  // taken before they arrived count as settled and get locked in.
+  const fingerprint = [
+    job.title,
+    job.company,
+    job.location,
+    job.description.length,
+    job.description.slice(0, 400),
+  ].join('\n');
   if (fingerprint !== pendingFingerprint && Date.now() < settleDeadline) {
     pendingFingerprint = fingerprint;
     overlay?.setStatus('Reading job…');
