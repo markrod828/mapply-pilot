@@ -109,7 +109,7 @@ export async function getJob(jobKey: string): Promise<JobRecord | undefined> {
 export async function saveJob(record: JobRecord): Promise<void> {
   const jobs = await getJobs();
   jobs[record.job.jobKey] = record;
-  await chrome.storage.local.set({ [KEYS.jobs]: pruneJobs(jobs) });
+  await chrome.storage.local.set({ [KEYS.jobs]: pruneJobs(jobs, record.job.jobKey) });
 }
 
 export async function updateJob(
@@ -121,16 +121,27 @@ export async function updateJob(
   if (!existing) return undefined;
   const next = update(existing);
   jobs[jobKey] = next;
-  await chrome.storage.local.set({ [KEYS.jobs]: jobs });
+  await chrome.storage.local.set({ [KEYS.jobs]: pruneJobs(jobs, jobKey) });
   return next;
 }
 
-/** Keep storage bounded: retain the 50 most recently captured jobs. */
-function pruneJobs(jobs: Record<string, JobRecord>): Record<string, JobRecord> {
+const MAX_JOBS = 50;
+
+/**
+ * Keep storage bounded: retain the most recently captured jobs. `keepKey` is the
+ * record the caller just wrote, which must survive even when it is an old capture
+ * the user has come back to.
+ */
+function pruneJobs(jobs: Record<string, JobRecord>, keepKey: string): Record<string, JobRecord> {
   const entries = Object.entries(jobs);
-  if (entries.length <= 50) return jobs;
+  if (entries.length <= MAX_JOBS) return jobs;
+
   entries.sort((a, b) => b[1].job.capturedAt - a[1].job.capturedAt);
-  return Object.fromEntries(entries.slice(0, 50));
+  const kept = entries.slice(0, MAX_JOBS);
+  if (jobs[keepKey] && !kept.some(([key]) => key === keepKey)) {
+    kept[kept.length - 1] = [keepKey, jobs[keepKey]];
+  }
+  return Object.fromEntries(kept);
 }
 
 export async function getActiveJobKey(): Promise<string | null> {

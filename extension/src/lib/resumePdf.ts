@@ -113,9 +113,18 @@ export async function buildResumePdf(
     }
   };
 
+  /** Height of `text` at a given size, so a block can reserve room for what follows it. */
+  const measure = (text: string, size: number, weight: 'normal' | 'bold', gap: number) => {
+    doc.setFont(style.font, weight);
+    doc.setFontSize(size);
+    return (doc.splitTextToSize(text, contentWidth) as string[]).length * gap;
+  };
+
   const sectionHeading = (text: string) => {
     y += 8;
-    newPageIfNeeded(style.headingSize * 2.2);
+    // Reserve the heading, its rule, and one line of whatever follows, so a heading
+    // never ends up stranded at the foot of a page.
+    newPageIfNeeded(style.headingSize * 1.15 + (style.headingRule ? 5 : 1) + lineHeight);
     write(text.toUpperCase(), {
       size: style.headingSize,
       weight: 'bold',
@@ -150,8 +159,13 @@ export async function buildResumePdf(
 
   const writeRole = (role: ExperienceEntry) => {
     y += 3;
-    newPageIfNeeded(lineHeight * 2);
     const titleLine = [role.title, role.company].filter(Boolean).join('  |  ');
+    // Keep the title, its dates and at least the first bullet together.
+    newPageIfNeeded(
+      measure(titleLine, style.bodySize + 0.5, 'bold', lineHeight) +
+        (role.dates ? lineHeight : 0) +
+        (role.bullets.length ? lineHeight : 0),
+    );
     write(titleLine, { weight: 'bold', size: style.bodySize + 0.5, gap: lineHeight });
     if (role.dates) {
       write(role.dates, {
@@ -166,6 +180,10 @@ export async function buildResumePdf(
 
   const writeProject = (project: ProjectEntry) => {
     y += 2;
+    newPageIfNeeded(
+      measure(project.name, style.bodySize + 0.25, 'bold', lineHeight) +
+        (project.bullets.length ? lineHeight : 0),
+    );
     write(project.name, { weight: 'bold', size: style.bodySize + 0.25, gap: lineHeight });
     for (const bullet of project.bullets.slice(0, 3)) writeBullet(bullet);
   };
@@ -173,9 +191,14 @@ export async function buildResumePdf(
   const writeEducation = (entry: EducationEntry) => {
     y += 2;
     const schoolLine = [entry.school, entry.location].filter(Boolean).join('  —  ');
-    if (schoolLine) write(schoolLine, { weight: 'bold', gap: lineHeight });
-    const degreeLine = [entry.degree, entry.year].filter(Boolean).join(', ');
-    if (degreeLine) write(degreeLine, { gap: lineHeight });
+    const degreeText = [entry.degree, entry.year].filter(Boolean).join(', ');
+    if (schoolLine) {
+      newPageIfNeeded(
+        measure(schoolLine, style.bodySize, 'bold', lineHeight) + (degreeText ? lineHeight : 0),
+      );
+      write(schoolLine, { weight: 'bold', gap: lineHeight });
+    }
+    if (degreeText) write(degreeText, { gap: lineHeight });
     for (const detail of entry.details.slice(0, 2)) writeBullet(detail);
   };
 

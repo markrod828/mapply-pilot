@@ -1,5 +1,6 @@
 import { scoreResume } from '../lib/atsScore';
 import { DEFAULT_RESUME_FILE, blobToBase64, getFile, tailoredResumeFile } from '../lib/db';
+import { hasHostAccess, originFor } from '../lib/hosts';
 import type { AutofillPayload, Message } from '../lib/messages';
 import {
   getActiveJob,
@@ -64,7 +65,7 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'RUN_AUTOFILL': {
       const tab = await chrome.tabs.get(message.tabId);
-      await ensureHostAccess(tab.url);
+      await assertHostAccess(tab.url);
       await chrome.scripting.executeScript({
         target: { tabId: message.tabId },
         files: ['content.js'],
@@ -78,33 +79,18 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
   }
 }
 
-/** Grant access to the active application tab (static hosts or optional prompt). */
-async function ensureHostAccess(pageUrl: string | undefined) {
-  if (!pageUrl) throw new Error('No active page URL.');
+/**
+ * Verify access to the application tab before injecting into it. The prompt itself
+ * has to come from the side panel: chrome.permissions.request only works inside a
+ * user gesture, which a service worker never has.
+ */
+async function assertHostAccess(pageUrl: string | undefined) {
+  const origin = originFor(pageUrl);
+  if (await hasHostAccess(origin)) return;
 
-  let originPattern: string;
-  let hostname: string;
-  try {
-    const url = new URL(pageUrl);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-      throw new Error('Autofill only works on http(s) application pages.');
-    }
-    hostname = url.hostname;
-    originPattern = `${url.protocol}//${url.host}/*`;
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Autofill')) throw error;
-    throw new Error('Cannot autofill this page.');
-  }
-
-  const already = await chrome.permissions.contains({ origins: [originPattern] });
-  if (already) return;
-
-  const granted = await chrome.permissions.request({ origins: [originPattern] });
-  if (!granted) {
-    throw new Error(
-      `ApplyPilot needs permission to access ${hostname}. Allow it when Chrome prompts, then try again.`,
-    );
-  }
+  throw new Error(
+    `ApplyPilot does not have access to ${origin.hostname}. Use "Autofill this page" in the side panel and allow the Chrome prompt.`,
+  );
 }
 
 async function onJobCaptured(job: JobPosting, tabId?: number) {
@@ -113,8 +99,10 @@ async function onJobCaptured(job: JobPosting, tabId?: number) {
     Boolean(existing) &&
     jobFingerprint(existing!.job) !== jobFingerprint(job);
 
-  // SPA pages often emit the previous posting's DOM under the new URL first. If the
-  // description later settles to something different, drop stale scores/drafts.
+  // A different description under the same posting id means the scores were computed
+  // against text that is no longer on the page, so they go. The tailored draft stays:
+  // it is the user's own work for this posting, it cost API calls, and they can
+  // regenerate it from the review step if the rewrite no longer fits.
   const record: JobRecord = existing
     ? {
         ...existing,
@@ -123,7 +111,6 @@ async function onJobCaptured(job: JobPosting, tabId?: number) {
           ? {
               baseScore: undefined,
               baseResumeHash: undefined,
-              tailored: undefined,
               tailoredScore: undefined,
             }
           : {}),

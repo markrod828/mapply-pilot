@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
     "build:fast": "vite build && vite build --config vite.content.config.ts",
     "dev": "vite build --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "jspdf": "^2.5.2",

@@ -1,3 +1,4 @@
+import { waitForApplicationForm } from './autofill/detect';
 import { autofillNow, startAutofillUi } from './autofill/ui';
 import { startJobright } from './jobright';
 
@@ -13,11 +14,16 @@ if (!window.__applyPilotLoaded) {
   if (/(^|\.)jobright\.ai$/.test(location.hostname)) {
     startJobright();
   } else {
-    startAutofillUi();
+    // On the ATS hosts this script is declared for, only offer to fill once an
+    // actual application form shows up - never on their marketing or listing pages.
+    void waitForApplicationForm().then((found) => {
+      if (found) startAutofillUi();
+    });
   }
 
   chrome.runtime.onMessage.addListener((message: { type: string }, _sender, sendResponse) => {
     if (message.type !== 'AUTOFILL_NOW') return undefined;
+    // Explicitly asked for, so show the panel without waiting on form detection.
     startAutofillUi();
     autofillNow()
       .then((result) => sendResponse({ ok: true, result }))

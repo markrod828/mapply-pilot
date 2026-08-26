@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { requestHostAccess } from '../../lib/hosts';
 import { sendMessage } from '../../lib/messages';
 import {
   DEFAULT_TAILOR_OPTIONS,
@@ -30,17 +31,17 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
 
   const jobKey = record?.job.jobKey;
   const tailored = record?.tailored;
+  // Identifies *which* draft is loaded, so a regenerate/refine re-runs the effect below.
+  const draftStamp = tailored?.createdAt;
 
-  // New job (or cleared board) resets the wizard; an existing draft jumps to review.
+  // A new job (or a cleared board) resets the wizard, and a draft - whether it was
+  // already stored or has just been generated - opens straight on review.
   useEffect(() => {
     setError(null);
-    setStep(tailored ? 'review' : 'compare');
+    setStep(draftStamp === undefined ? 'compare' : 'review');
     setOptions(tailored?.options ?? DEFAULT_TAILOR_OPTIONS);
-  }, [jobKey, setError]);
-
-  useEffect(() => {
-    if (tailored) setStep('review');
-  }, [tailored?.createdAt, jobKey]);
+    // `tailored` is read only for the options that came with `draftStamp`.
+  }, [jobKey, draftStamp, setError]);
 
   if (!settings.openaiApiKey) {
     return (
@@ -107,6 +108,9 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
     run('autofill', async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id === undefined) throw new Error('No active tab.');
+      // Has to happen here, in the click handler: Chrome only shows the optional
+      // host-permission prompt during a user gesture, so the worker cannot ask.
+      await requestHostAccess(tab.url);
       const response = await sendMessage<{ ok: boolean; error?: string }>({
         type: 'RUN_AUTOFILL',
         tabId: tab.id,

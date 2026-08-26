@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { putFile, tailoredResumeFile } from '../../lib/db';
+import { downloadBlob } from '../../lib/download';
 import { sendMessage } from '../../lib/messages';
 import { TEMPLATES, buildResumePdf, resumeFileName } from '../../lib/resumePdf';
 import { setSettings, updateJob } from '../../lib/storage';
@@ -64,12 +65,7 @@ export function ReviewStep({ record, profile, settings, pending, run, onBack }: 
 
   const downloadPdf = async () => {
     const pdf = await buildResumePdf(profile, { ...draft, text: draftText }, template);
-    const url = URL.createObjectURL(pdf);
-    try {
-      await chrome.downloads.download({ url, filename: resumeFileName(profile, record.job.company) });
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    await downloadBlob(pdf, resumeFileName(profile, record.job.company));
   };
 
   const refine = async (text: string) => {

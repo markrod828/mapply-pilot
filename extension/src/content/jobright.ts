@@ -5,13 +5,19 @@ import { mountOverlay, type OverlayHandle } from './overlay';
 /** Only score when the SPA is on an individual job page: /jobs/info/{id} */
 const JOB_INFO_PATH = /^\/jobs\/info\/[^/]+\/?$/i;
 
+/** How long to keep re-reading the DOM before accepting the description as final. */
+const SETTLE_POLL_MS = 500;
+const SETTLE_TIMEOUT_MS = 8000;
+
 let overlay: OverlayHandle | null = null;
 /** Job info id we last started loading (`/jobs/info/{id}`). */
 let activeJobId: string | null = null;
-/** Job key we last successfully sent to the background. */
-let currentJobKey: string | null = null;
-/** Description fingerprint for the last capture (detects SPA content settle). */
-let contentFingerprint = '';
+/** Job info id already sent to the background; later DOM churn for it is ignored. */
+let capturedJobId: string | null = null;
+/** Description fingerprint from the previous scan, used to spot the SPA settling. */
+let pendingFingerprint = '';
+/** When to stop waiting for the description to settle and score what we have. */
+let settleDeadline = 0;
 let scanTimer: number | undefined;
 let clearInFlight = false;
 
@@ -28,8 +34,9 @@ export function startJobright(): void {
       renderScore(message.score);
     }
     if (message.type === 'RESCAN') {
-      currentJobKey = null;
-      contentFingerprint = '';
+      capturedJobId = null;
+      pendingFingerprint = '';
+      settleDeadline = Date.now() + SETTLE_TIMEOUT_MS;
       scheduleScan(0, true);
     }
   });
@@ -65,8 +72,8 @@ function scheduleScan(delay: number, force = false) {
 }
 
 async function clearActiveJob(status: string) {
-  currentJobKey = null;
-  contentFingerprint = '';
+  capturedJobId = null;
+  pendingFingerprint = '';
   overlay?.setStatus(status);
 
   if (clearInFlight) return;
@@ -96,26 +103,36 @@ async function scan() {
   // Entering a different /jobs/info/{id} → clear active job and reload from scratch.
   if (jobId !== activeJobId) {
     activeJobId = jobId;
+    settleDeadline = Date.now() + SETTLE_TIMEOUT_MS;
     await clearActiveJob('Loading job…');
   }
+
+  // This posting has already been captured. The in-page tabs (Overview, Company)
+  // swap the whole content block without touching the URL, so re-reading here would
+  // capture the wrong text and throw away the score and draft for the same posting.
+  if (capturedJobId === jobId) return;
 
   const job = extractJob();
   if (!job) {
     overlay?.setStatus('Waiting for job details…');
+    // Keep looking: the next scan is otherwise only driven by DOM mutations, which
+    // stop once the shell has rendered but before the description arrives.
+    if (Date.now() < settleDeadline) scheduleScan(SETTLE_POLL_MS, true);
     return;
   }
 
-  // Reject stale SPA DOM still showing the previous posting under the new URL.
-  if (!job.jobKey.endsWith(`:${jobId}`)) {
-    overlay?.setStatus('Waiting for job details…');
-    return;
-  }
-
+  // Jobright renders the previous posting's DOM under the new URL for a moment, and
+  // the job key comes from the URL, so it cannot tell us the body is stale. Wait for
+  // two identical reads instead: scoring once, late, beats scoring twice.
   const fingerprint = `${job.title}\n${job.description.length}\n${job.description.slice(0, 400)}`;
-  if (job.jobKey === currentJobKey && fingerprint === contentFingerprint) return;
+  if (fingerprint !== pendingFingerprint && Date.now() < settleDeadline) {
+    pendingFingerprint = fingerprint;
+    overlay?.setStatus('Reading job…');
+    scheduleScan(SETTLE_POLL_MS, true);
+    return;
+  }
 
-  currentJobKey = job.jobKey;
-  contentFingerprint = fingerprint;
+  capturedJobId = jobId;
   overlay?.setScore(null, 'Scoring your resume…');
   await requestScore(job);
 }
