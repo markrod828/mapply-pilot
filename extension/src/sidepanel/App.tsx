@@ -47,9 +47,21 @@ export function App() {
     <>
       <header>
         <div className="brand-mark" aria-hidden="true">
-          {/* The same ascent arrow as the toolbar icon. */}
+          {/* The same plane-leaving-a-briefcase as the toolbar icon. Monochrome on the
+              accent here, so what the icon says in colour — the case sitting back, the
+              fold turned away from the light — this says in opacity. The case is grouped
+              so its handle and body composite once and the overlap stays invisible. */}
           <svg viewBox="0 0 24 24" fill="none">
-            <path d="M12 4 4 13h5v7h6v-7h5L12 4Z" fill="#fff" />
+            <g opacity="0.55">
+              <path
+                d="M10.6 17.4v-1.2a1.2 1.2 0 0 1 1.2-1.2h.4a1.2 1.2 0 0 1 1.2 1.2v1.2"
+                stroke="#fff"
+                strokeWidth="1.25"
+              />
+              <rect x="5.6" y="16.2" width="12.8" height="5.2" rx="1.15" fill="#fff" />
+            </g>
+            <path d="M20.5 2.6 2.4 6.7 8.6 8.9 7.2 12.6Z" fill="#fff" fillOpacity="0.72" />
+            <path d="M20.5 2.6 2.4 6.7 8.6 8.9Z" fill="#fff" />
           </svg>
         </div>
         <div className="brand-text">

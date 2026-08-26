@@ -1,10 +1,14 @@
-// Generates ApplyPilot's toolbar icons: dark rounded square + sky-blue ascent arrow.
+// Generates ApplyPilot's toolbar icons: a paper plane leaving a briefcase, on a dark
+// rounded square.
 // 4x supersampled, written as RGBA PNGs with no external dependencies.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const BG = [15, 23, 42];      // slate-900, matches the in-page panel
-const FG = [56, 189, 248];    // sky-400, matches the panel's primary button
+const WING = [56, 189, 248];  // sky-400, matches the panel's primary button
+const FOLD = [2, 132, 199];   // sky-600, the underside the fold turns away from the light
+const CASE = [148, 163, 184]; // slate-400, held back so the plane stays the first read
 const SS = 4;                 // supersample factor
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -49,10 +53,11 @@ function encodePng(size, rgba) {
 
 // --- shapes, in unit space so every size renders identically ---
 
-function inRoundedRect(x, y, radius) {
-  const cx = Math.min(Math.max(x, radius), 1 - radius);
-  const cy = Math.min(Math.max(y, radius), 1 - radius);
-  return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2;
+function inRoundedBox(x, y, { x0, y0, x1, y1, r }) {
+  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+  const cx = Math.min(Math.max(x, x0 + r), x1 - r);
+  const cy = Math.min(Math.max(y, y0 + r), y1 - r);
+  return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2;
 }
 
 function inTriangle(x, y, [ax, ay], [bx, by], [cx, cy]) {
@@ -65,15 +70,28 @@ function inTriangle(x, y, [ax, ay], [bx, by], [cx, cy]) {
   return !(hasNeg && hasPos);
 }
 
-const ARROW_HEAD = [[0.5, 0.18], [0.2, 0.55], [0.8, 0.55]];
-const ARROW_STEM = { x0: 0.395, x1: 0.605, y0: 0.5, y1: 0.83 };
+const PLATE = { x0: 0, y0: 0, x1: 1, y1: 1, r: 0.22 };
+
+// The plane: the application being sent, and the flight the name promises. Two facets
+// meet along NOSE-FOLD_MID so it reads as folded paper rather than a plain triangle.
+const NOSE = [0.855, 0.11];
+const TAIL_FAR = [0.1, 0.28];
+const FOLD_MID = [0.36, 0.37];
+const TAIL_NEAR = [0.3, 0.525];
+
+// The briefcase: the job the plane is leaving. Handle boxes run past the body's top edge
+// so their rounded lower corners are buried under it and the two read as one piece.
+const CASE_BODY = { x0: 0.235, y0: 0.675, x1: 0.765, y1: 0.89, r: 0.048 };
+const HANDLE_OUTER = { x0: 0.415, y0: 0.6, x1: 0.585, y1: 0.72, r: 0.045 };
+const HANDLE_INNER = { x0: 0.467, y0: 0.652, x1: 0.533, y1: 0.75, r: 0.024 };
 
 function sample(x, y) {
-  if (!inRoundedRect(x, y, 0.22)) return null;
-  const onArrow =
-    inTriangle(x, y, ...ARROW_HEAD) ||
-    (x >= ARROW_STEM.x0 && x <= ARROW_STEM.x1 && y >= ARROW_STEM.y0 && y <= ARROW_STEM.y1);
-  return onArrow ? FG : BG;
+  if (!inRoundedBox(x, y, PLATE)) return null;
+  if (inTriangle(x, y, NOSE, TAIL_FAR, FOLD_MID)) return WING;
+  if (inTriangle(x, y, NOSE, FOLD_MID, TAIL_NEAR)) return FOLD;
+  if (inRoundedBox(x, y, CASE_BODY)) return CASE;
+  if (inRoundedBox(x, y, HANDLE_OUTER) && !inRoundedBox(x, y, HANDLE_INNER)) return CASE;
+  return BG;
 }
 
 function render(size) {
@@ -107,7 +125,9 @@ function render(size) {
   return rgba;
 }
 
-const outDir = process.argv[2] ?? new URL("../public/icons", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows the latter hands back '/C:/…', which then
+// resolves against the cwd and writes into a phantom 'C:\C:\…' directory.
+const outDir = process.argv[2] ?? fileURLToPath(new URL('../public/icons', import.meta.url));
 mkdirSync(outDir, { recursive: true });
 for (const size of [16, 32, 48, 128]) {
   const file = `${outDir}/icon-${size}.png`;
