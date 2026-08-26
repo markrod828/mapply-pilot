@@ -1,7 +1,7 @@
 import { deleteRecord, getRecord, putRecord } from './db';
 import { downloadBlob } from './download';
 import { resumeSavePath } from './savePath';
-import type { JobPosting, Profile, ResumeTemplate } from './types';
+import type { JobPosting, Profile } from './types';
 
 /**
  * Chrome's downloads API can only write inside the browser's download folder -
@@ -66,21 +66,6 @@ export interface SaveResult {
   location: string;
   /** True when it went to the browser's download folder rather than the chosen one. */
   viaDownloads: boolean;
-}
-
-/** Filed beside the resume for the same job, as "<name> - Cover Letter.pdf". */
-export async function saveCoverLetter(
-  letter: string,
-  profile: Profile,
-  job: Pick<JobPosting, 'company' | 'title'>,
-  template: ResumeTemplate,
-): Promise<SaveResult> {
-  const { buildCoverLetterPdf } = await import('./coverLetterPdf');
-  const pdf = await buildCoverLetterPdf(profile, job, letter, template);
-
-  const segments = resumeSavePath(profile, job);
-  segments[segments.length - 1] = segments[segments.length - 1].replace(/\.pdf$/, ' - Cover Letter.pdf');
-  return writeOut(pdf, segments);
 }
 
 export async function saveResumePdf(

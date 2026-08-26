@@ -184,6 +184,8 @@ export interface Settings {
   scoreModel: string;
   tailorModel: string;
   autoScore: boolean;
+  /** Write answers to screening questions the form asks during autofill. */
+  answerQuestions: boolean;
   resumeTemplate: ResumeTemplate;
   /**
    * Name of the folder picked for saved resumes, for display only - the handle that
@@ -198,8 +200,16 @@ export interface CoverLetter {
   createdAt: number;
 }
 
+export interface GeneratedAnswer {
+  /** The question exactly as the form asked it, used as the cache key. */
+  question: string;
+  answer: string;
+}
+
 export interface JobRecord {
   job: JobPosting;
+  /** Screening answers written for this job's application form. */
+  answers?: GeneratedAnswer[];
   baseScore?: AtsScore;
   tailoredScore?: AtsScore;
   tailored?: TailoredResume;
@@ -213,6 +223,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scoreModel: 'gpt-4o-mini',
   tailorModel: 'gpt-4o',
   autoScore: true,
+  answerQuestions: true,
   resumeTemplate: 'classic',
   saveDirectoryName: '',
 };

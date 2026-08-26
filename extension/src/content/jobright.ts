@@ -8,6 +8,10 @@ const JOB_INFO_PATH = /^\/jobs\/info\/[^/]+\/?$/i;
 /** How long to keep re-reading the DOM before accepting the description as final. */
 const SETTLE_POLL_MS = 500;
 const SETTLE_TIMEOUT_MS = 8000;
+/** Quiet period after the page finishes loading, before the first read. */
+const INITIAL_SCAN_DELAY_MS = 1000;
+/** Backstop for pages whose `load` event never arrives. */
+const LOAD_FALLBACK_MS = 10000;
 
 let overlay: OverlayHandle | null = null;
 /** Job info id we last started loading (`/jobs/info/{id}`). */
@@ -20,6 +24,8 @@ let pendingFingerprint = '';
 let settleDeadline = 0;
 let scanTimer: number | undefined;
 let clearInFlight = false;
+/** Nothing reads the page until the load has settled - see startScanningAfterLoad. */
+let ready = false;
 
 export function startJobright(): void {
   overlay = mountOverlay(() => {
@@ -27,7 +33,7 @@ export function startJobright(): void {
   });
 
   watchNavigation();
-  scheduleScan(600);
+  startScanningAfterLoad();
 
   chrome.runtime.onMessage.addListener((message: { type: string; score?: AtsScore }) => {
     if (message.type === 'SCORE_READY' && message.score && isJobInfoPage()) {
@@ -57,7 +63,39 @@ function renderScore(score: AtsScore) {
  * Throttles rather than debounces: a busy SPA mutates constantly, and resetting
  * the timer on every mutation would starve the scan entirely.
  */
+/**
+ * Hold every read until one second after the page has finished loading.
+ *
+ * Content scripts run at document_idle, which Chrome fires at whichever comes first:
+ * the load event, or 200ms after DOMContentLoaded. So this cannot assume loading is
+ * done - it waits for `load` when the document is still going.
+ */
+function startScanningAfterLoad(): void {
+  let started = false;
+
+  const begin = () => {
+    if (started) return;
+    started = true;
+    window.setTimeout(() => {
+      ready = true;
+      scheduleScan(0, true);
+    }, INITIAL_SCAN_DELAY_MS);
+  };
+
+  if (document.readyState === 'complete') {
+    begin();
+    return;
+  }
+
+  window.addEventListener('load', begin, { once: true });
+  // A page that keeps a resource open may never fire `load`; do not starve scoring.
+  window.setTimeout(begin, LOAD_FALLBACK_MS);
+}
+
 function scheduleScan(delay: number, force = false) {
+  // Mutations start arriving long before the page has settled; ignore them until then.
+  if (!ready) return;
+
   if (force) {
     window.clearTimeout(scanTimer);
     scanTimer = undefined;

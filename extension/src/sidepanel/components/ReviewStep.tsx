@@ -7,7 +7,6 @@ import { setSettings, updateJob } from '../../lib/storage';
 import { storeTailoredPdf } from '../../lib/tailoredFile';
 import { containsKeyword, renderResumeText } from '../../lib/tailor';
 import type { JobRecord, Profile, ResumeTemplate, Settings, TailoredResume } from '../../lib/types';
-import { CoverLetterCard } from './CoverLetterCard';
 import { ResumePreview } from './ResumePreview';
 import { ScoreGauge } from './ScoreGauge';
 
@@ -472,14 +471,6 @@ export function ReviewStep({ record, profile, settings, originalText, pending, r
           </p>
         )}
       </div>
-
-      <CoverLetterCard
-        record={record}
-        profile={profile}
-        settings={settings}
-        pending={pending}
-        run={run}
-      />
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>Tweak with AI</h2>

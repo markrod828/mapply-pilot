@@ -60,7 +60,6 @@ export function deleteRecord(key: string): Promise<undefined> {
 
 export const DEFAULT_RESUME_FILE = 'default-resume';
 export const tailoredResumeFile = (jobKey: string) => `tailored:${jobKey}`;
-export const coverLetterFile = (jobKey: string) => `cover:${jobKey}`;
 
 export async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer();

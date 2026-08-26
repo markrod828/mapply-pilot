@@ -1,4 +1,12 @@
-import type { AtsScore, JobPosting, Profile, TailorOptions, TailoredResume } from './types';
+import type { FormQuestion, QuestionAnswer } from './questions';
+import type {
+  AtsScore,
+  CoverLetter,
+  JobPosting,
+  Profile,
+  TailorOptions,
+  TailoredResume,
+} from './types';
 
 export interface AutofillPayload {
   profile: Profile;
@@ -8,11 +16,6 @@ export interface AutofillPayload {
   resumeFileBase64: string;
   resumeFileMime: string;
   usingTailored: boolean;
-  /** Cover letter body for textarea fields; empty when none has been generated. */
-  coverLetterText: string;
-  coverLetterFileName: string;
-  /** base64 (no data: prefix) of the cover letter PDF, when one has been stored. */
-  coverLetterFileBase64: string;
   /** Human-readable description of the file being attached, shown in the page panel. */
   resumeLabel: string;
   /** A tailored draft exists for this job but has no stored PDF, so the default went up. */
@@ -27,10 +30,12 @@ export type Message =
   | { type: 'REQUEST_TAILOR'; jobKey: string; options: TailorOptions }
   | { type: 'REQUEST_REFINE'; jobKey: string; instruction: string }
   | { type: 'REQUEST_RESCORE_TAILORED'; jobKey: string }
-  | { type: 'REQUEST_COVER_LETTER'; jobKey: string }
+  /** Omit jobKey to write one for whichever job is currently open. */
+  | { type: 'REQUEST_COVER_LETTER'; jobKey?: string }
   | { type: 'GET_ACTIVE_JOB' }
   | { type: 'GET_AUTOFILL_PAYLOAD' }
   | { type: 'RUN_AUTOFILL'; tabId: number }
+  | { type: 'REQUEST_ANSWERS'; questions: FormQuestion[] }
   | { type: 'STATE_CHANGED' };
 
 export interface ScoreResponse {
@@ -49,6 +54,18 @@ export interface AutofillResponse {
   ok: boolean;
   error?: string;
   payload?: AutofillPayload;
+}
+
+export interface CoverLetterResponse {
+  ok: boolean;
+  error?: string;
+  coverLetter?: CoverLetter;
+}
+
+export interface AnswersResponse {
+  ok: boolean;
+  error?: string;
+  answers?: QuestionAnswer[];
 }
 
 export function sendMessage<T>(message: Message): Promise<T> {

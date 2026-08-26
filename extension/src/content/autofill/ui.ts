@@ -17,7 +17,30 @@ const STYLE = `
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
   padding: 12px;
 }
-.title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: grab;
+  user-select: none;
+  /* Let the pointer drag rather than scroll the page under it. */
+  touch-action: none;
+}
+.header:active { cursor: grabbing; }
+.title { font-size: 12px; font-weight: 700; }
+.close {
+  width: auto;
+  flex: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+.close:hover { background: rgba(148, 163, 184, 0.2); color: #f8fafc; }
 button {
   width: 100%;
   font: inherit;
@@ -53,9 +76,26 @@ export function startAutofillUi(): void {
   const panel = document.createElement('div');
   panel.className = 'panel';
 
+  const header = document.createElement('div');
+  header.className = 'header';
+
   const title = document.createElement('div');
   title.className = 'title';
   title.textContent = 'ApplyPilot';
+  title.title = 'Drag to move';
+
+  const close = document.createElement('button');
+  close.className = 'close';
+  close.textContent = '×';
+  close.title = 'Hide this panel';
+  close.setAttribute('aria-label', 'Hide ApplyPilot');
+  close.addEventListener('click', () => {
+    host.remove();
+    // Allow it back when autofill is asked for again.
+    mounted = false;
+  });
+
+  header.append(title, close);
 
   const button = document.createElement('button');
   button.textContent = 'Autofill this application';
@@ -77,9 +117,107 @@ export function startAutofillUi(): void {
     }
   });
 
-  panel.append(title, button, status);
+  panel.append(header, button, status);
   shadow.append(style, panel);
   document.documentElement.appendChild(host);
+
+  makeDraggable(panel, header);
+  void restorePosition(panel);
+}
+
+const POSITION_KEY = 'autofillPanelPosition';
+/** Keep this much of a gap so the panel cannot be dragged off the viewport. */
+const EDGE = 8;
+
+interface PanelPosition {
+  left: number;
+  top: number;
+}
+
+/**
+ * The panel sits over the form, so it has to be movable - otherwise it covers the
+ * very buttons you are trying to press. Dragging is by the header only, leaving the
+ * autofill button and the status text clickable and selectable.
+ */
+function makeDraggable(panel: HTMLElement, handle: HTMLElement): void {
+  let activePointer: number | null = null;
+  let grabX = 0;
+  let grabY = 0;
+
+  handle.addEventListener('pointerdown', (event) => {
+    // Left button only, and never start a drag from the close button.
+    if (event.button !== 0 || (event.target as HTMLElement).closest('.close')) return;
+
+    const rect = panel.getBoundingClientRect();
+    grabX = event.clientX - rect.left;
+    grabY = event.clientY - rect.top;
+    activePointer = event.pointerId;
+    handle.setPointerCapture(activePointer);
+    // Swap the right/bottom anchoring for explicit coordinates before moving.
+    place(panel, rect.left, rect.top);
+    event.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', (event) => {
+    if (activePointer === null || event.pointerId !== activePointer) return;
+    place(panel, event.clientX - grabX, event.clientY - grabY);
+  });
+
+  const release = (event: PointerEvent) => {
+    if (activePointer === null || event.pointerId !== activePointer) return;
+    handle.releasePointerCapture(activePointer);
+    activePointer = null;
+    void savePosition(panel);
+  };
+
+  handle.addEventListener('pointerup', release);
+  handle.addEventListener('pointercancel', release);
+
+  // A window that shrinks must not strand the panel outside the viewport.
+  window.addEventListener('resize', () => {
+    if (panel.style.left) place(panel, parseFloat(panel.style.left), parseFloat(panel.style.top));
+  });
+}
+
+function place(panel: HTMLElement, left: number, top: number): void {
+  const maxLeft = Math.max(EDGE, window.innerWidth - panel.offsetWidth - EDGE);
+  const maxTop = Math.max(EDGE, window.innerHeight - panel.offsetHeight - EDGE);
+
+  panel.style.left = `${clamp(left, EDGE, maxLeft)}px`;
+  panel.style.top = `${clamp(top, EDGE, maxTop)}px`;
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+async function savePosition(panel: HTMLElement): Promise<void> {
+  const position: PanelPosition = {
+    left: parseFloat(panel.style.left),
+    top: parseFloat(panel.style.top),
+  };
+  if (!Number.isFinite(position.left) || !Number.isFinite(position.top)) return;
+
+  try {
+    await chrome.storage.local.set({ [POSITION_KEY]: position });
+  } catch {
+    // Extension reloaded; the panel still works, it just will not remember.
+  }
+}
+
+/** Put the panel back where it was last left, on this and every other form. */
+async function restorePosition(panel: HTMLElement): Promise<void> {
+  try {
+    const stored = await chrome.storage.local.get(POSITION_KEY);
+    const position = stored[POSITION_KEY] as PanelPosition | undefined;
+    if (position && Number.isFinite(position.left) && Number.isFinite(position.top)) {
+      place(panel, position.left, position.top);
+    }
+  } catch {
+    // No stored position, or the extension reloaded: leave the default corner.
+  }
 }
 
 export async function autofillNow(): Promise<AutofillResult> {
@@ -98,12 +236,39 @@ function renderResult(result: AutofillResult): string {
       : 'No resume upload field found.',
   ];
 
-  if (result.coverLetterAttached) {
-    lines.push('Cover letter attached.');
+  if (result.coverLetter === 'text') {
+    lines.push('Cover letter written and pasted in — read it before submitting.');
+  } else if (result.coverLetter === 'file') {
+    lines.push('Cover letter written and attached — read it before submitting.');
+  }
+
+  if (result.coverLetterWarning) {
+    lines.push(`<span class="warn">${escapeHtml(result.coverLetterWarning)}</span>`);
   }
 
   if (result.resumeWarning) {
     lines.push(`<span class="warn">${escapeHtml(result.resumeWarning)}</span>`);
+  }
+
+  if (result.answered.length) {
+    lines.push(
+      `<strong>${result.answered.length}</strong> question(s) answered from your resume — outlined amber, read them.`,
+    );
+  }
+
+  if (result.ownWordsAsked.length) {
+    const items = result.ownWordsAsked
+      .slice(0, 3)
+      .map((label) => `<li>${escapeHtml(label)}</li>`)
+      .join('');
+    lines.push(
+      `<span class="warn">This employer asked for your own words on:</span><ul>${items}</ul>` +
+        '<span class="warn">Rewrite these yourself before submitting.</span>',
+    );
+  }
+
+  if (result.answerWarning) {
+    lines.push(`<span class="warn">${escapeHtml(result.answerWarning)}</span>`);
   }
 
   if (result.skipped.length) {

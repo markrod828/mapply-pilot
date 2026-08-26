@@ -6,10 +6,9 @@ A Chrome side-panel extension that assists job applications on [jobright.ai](htt
    breakdown of keyword coverage, skills overlap, title/experience alignment and must-haves.
 2. **Tailored resume** — rewrite your resume toward that job description, edit the draft, accept it,
    and see the new ATS score next to the original.
-3. **Cover letter** — written automatically alongside the tailored resume, for that specific company
-   and posting, and editable before it goes anywhere.
-4. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
-   your profile, the tailored resume and the cover letter.
+3. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
+   your profile and the tailored resume, writing a cover letter and answering the screening
+   questions on the spot when the form asks for them.
 
 Nothing is submitted automatically. ApplyPilot fills fields and stops; you review and press submit.
 
@@ -68,15 +67,15 @@ In the side panel:
      **Preview** (formatted, with inserted keywords highlighted, plus the template switcher),
      **Changes** (a line-by-line comparison against your original) and **Edit**. There is also a
      "tweak with AI" box for follow-up instructions.
-   A **cover letter** for this company and posting is written as soon as the tailored resume is,
-   using that resume as the source. Read it, edit it in place, regenerate it, or save it as a PDF.
    Then **Accept & re-score** to see what the rewrite did to your score. Autofill already
    attaches the draft you are looking at, edits included — accepting is about the score, not
    about making the resume uploadable.
 4. Open the application form. On Greenhouse, Lever, Ashby and Rippling a small **Autofill this
    application** panel appears once the form itself is on the page. On any other site, use
    **Autofill this page** in the side panel and allow the one-time Chrome permission prompt for
-   that host. Filled fields are outlined; still-required fields are listed.
+   that host. Filled fields are outlined; still-required fields are listed. Drag the panel by its
+   title bar if it sits over something you need, or press × to hide it — where you leave it is
+   remembered for the next form.
 5. Check every field, then submit yourself.
 
 ## How it works
@@ -94,6 +93,8 @@ extension/
       jobright.ts           SPA-aware job detection and score overlay
       autofill/             field matching, site adapters, fill engine, in-page panel
         detect.ts           waits for a real application form before offering to fill
+        choices.ts          pick-one questions: radios, ARIA widgets, button rows
+        combobox.ts         drives react-select style pickers
     lib/                    types, storage, OpenAI client, ATS rubric, tailor prompt, PDF in/out
       hosts.ts              per-site permission checks and prompts
       diffText.ts           word-level LCS diff
@@ -101,7 +102,7 @@ extension/
       savePath.ts           resumes/{company}/{job title}/{name}.pdf, sanitised
       saveLocation.ts       chosen-folder writes, falling back to Downloads
       coverLetter.ts        cover letter prompt and generation
-      coverLetterPdf.ts     business-letter PDF in the resume's type
+      questions.ts          answers screening questions from your resume
     sidepanel/              React UI (Job, Resume, Profile, Settings tabs)
 ```
 
@@ -125,12 +126,12 @@ extension/
   reflects what was actually written rather than what the model claimed.
 - "What changed" counts are computed by diffing the draft against your original resume, not taken
   from the model's self-report.
-- The cover letter is written from the tailored resume plus the posting, and is held to the same
-  rule as the rewrite: no invented statistics, accomplishments, qualifications or personal
-  connection to the company. It aims at 250–400 words in 3–5 paragraphs, opens with the position and
-  your strongest relevant qualification, and addresses "Dear Hiring Manager," rather than guessing a
-  name. Autofill pastes it into a cover-letter textarea and attaches the PDF where a form wants a
-  file; labels like "upload cover letter" are left to the file input rather than typed into.
+- The cover letter is written during autofill, only once a form actually asks for one, from the
+  tailored resume plus the posting. It is held to the same rule as the rewrite: no invented
+  statistics, accomplishments, qualifications or personal connection to the company. It aims at
+  250–400 words in 3–5 paragraphs, opens with the position and your strongest relevant
+  qualification, and addresses "Dear Hiring Manager," rather than guessing a name. It is cached
+  against the job, and dropped when you re-tailor or refine the resume it was written from.
 - The **Changes** view compares the draft with your original resume in code, not by asking the model
   what it did. Your original is plain text with no sections, so each new bullet is paired with the
   line it most resembles and diffed word by word: new wording is green, wording it replaced is
@@ -140,6 +141,31 @@ extension/
 - The prompt forbids inventing employers, titles, dates, degrees or metrics, and sections you did
   not select are reproduced verbatim. Keywords you tick are treated as true. Read the draft before
   you accept it — you are responsible for every claim on your resume.
+
+## Answered questions
+
+Autofill runs its deterministic passes first — site adapters, profile rules, radio groups, your
+saved answers, the cover letter and the file uploads. Whatever is still empty and reads like a
+question is then answered from your resume and the posting you have open, and written into the form
+**outlined amber** rather than green, because those answers need reading.
+
+Answers are grounded, not invented: the prompt forbids making up employers, titles, dates, degrees,
+metrics or years, and a question the resume gives no basis for is left blank for you. Answers to
+option pickers must be one of the offered options verbatim, and are discarded in code if they are
+not. Each answer is cached against the job, so re-running autofill on the same form costs nothing
+and does not reword itself.
+
+Two categories are never sent to the model:
+
+- **Personal facts** — name, contact details, location, salary, notice period, and work
+  authorization, visa sponsorship or citizenship. These come from your **Profile** or stay empty.
+  They are facts about you, not things to infer from a resume.
+- **Protected characteristics** — gender, race, ethnicity, veteran status, disability,
+  accommodations. Voluntary self-identification is yours to answer.
+
+If a question asks for your own words — "in your own words", "not AI" — it is still answered, but
+the panel names that field and tells you to rewrite it. Employers who ask this often weight the
+answer heavily, and it is usually the question worth writing yourself.
 
 ## Where resumes are saved
 
@@ -151,8 +177,7 @@ resumes/{company}/{job title}/{your full name}.pdf
 
 Illegal path characters are stripped from the company and title, long names are shortened, and
 empty ones become `Unknown company` / `Unknown role`. Saving the same job twice overwrites that
-file rather than piling up copies. A saved cover letter lands beside it as
-`{your full name} - Cover Letter.pdf`.
+file rather than piling up copies.
 
 By default this tree sits in your **Downloads** folder, because that is the only place a Chrome
 extension can write on its own — the downloads API rejects absolute paths and `..`, so
@@ -202,4 +227,20 @@ worker so the key is never exposed to page scripts.
   grant site access before autofill can run.
 - File attachment works where the form uses a real `<input type="file">`; drag-and-drop-only widgets
   need a manual upload.
+- The cover letter is pasted into a text box wherever the form offers one, since an ATS reads that
+  directly instead of parsing an attachment. Where a form hides the box behind an "Enter manually"
+  button, that button is pressed first. Only when there is no text option at all is the letter
+  uploaded, as a `.txt` file, and only where the upload accepts plain text.
+- Dropdowns built as custom widgets (react-select, which Greenhouse now uses for every Yes/No and
+  location field) are driven by opening the menu and clicking the matching option, then confirming
+  the control took it. A picker whose options do not contain your answer is left alone rather than
+  set to something close.
+- Pick-one questions are handled whichever way the form draws them: real radio inputs (usually
+  visually hidden behind a styled label), `role="radiogroup"` widgets, or a plain row of buttons —
+  Ashby draws Yes/No that way, with no input on the page at all. An option is only clicked when its
+  text matches the answer; nothing is picked on a guess.
+- Where a form offers to parse a resume into its fields ("Autofill from resume"), that uploader is
+  skipped so the resume lands in the actual resume field instead.
+- Screening questions still empty after all of that are answered from your resume for the job you
+  have open — see [Answered questions](#answered-questions). Turn it off in Settings.
 - No auto-submit, no CAPTCHA handling, no cloud sync.

@@ -9,7 +9,12 @@ export interface FieldRule {
   longForm?: boolean;
 }
 
-export function buildRules(profile: Profile, resumeText: string, coverLetter = ''): FieldRule[] {
+/**
+ * Ordered: the first rule whose label matches wins, so put the specific ones first.
+ * The cover letter is not here - it needs a textarea revealed by a button on some
+ * forms, so the engine handles it directly.
+ */
+export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
 
@@ -33,9 +38,23 @@ export function buildRules(profile: Profile, resumeText: string, coverLetter = '
       exclude: /linked-?in|git-?hub|company/,
       value: profile.portfolio,
     },
-    { key: 'city', test: /\bcity\b|\btown\b/, exclude: /company|employer/, value: profile.city },
+    {
+      key: 'city',
+      test: /\bcity\b|\btown\b/,
+      // "Are you open to relocating to New York City?" is a preference question that
+      // happens to name a city, not a box to type your own city into.
+      exclude: /company|employer|relocat|willing|open to|prefer|commut/,
+      value: profile.city,
+    },
     { key: 'state', test: /\bstate\b|province|\bregion\b/, exclude: /united states/, value: profile.state },
-    { key: 'country', test: /\bcountry\b/, value: profile.country },
+    {
+      key: 'country',
+      test: /\bcountry\b/,
+      // "…sponsorship for the country you are applying?" is a sponsorship question
+      // that happens to contain the word, and it is answered yes/no, not "USA".
+      exclude: /sponsor|visa|authoriz|permit|citizen|eligib/,
+      value: profile.country,
+    },
     {
       key: 'location',
       test: /current location|where are you (based|located)|location/,
@@ -77,14 +96,6 @@ export function buildRules(profile: Profile, resumeText: string, coverLetter = '
       key: 'resumeText',
       test: /paste (your )?(resume|cv)|resume text|cv text/,
       value: resumeText,
-      longForm: true,
-    },
-    {
-      key: 'coverLetter',
-      test: /cover ?letter|letter of interest|motivation letter/,
-      // "Upload a cover letter" labels a file input, not somewhere to type one.
-      exclude: /upload|attach|file|resume|cv/,
-      value: coverLetter,
       longForm: true,
     },
   ];

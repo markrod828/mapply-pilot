@@ -1,4 +1,4 @@
-import { waitForApplicationForm } from './autofill/detect';
+import { looksLikeApplicationForm, waitForApplicationForm } from './autofill/detect';
 import { autofillNow, startAutofillUi } from './autofill/ui';
 import { startJobright } from './jobright';
 
@@ -23,6 +23,9 @@ if (!window.__applyPilotLoaded) {
 
   chrome.runtime.onMessage.addListener((message: { type: string }, _sender, sendResponse) => {
     if (message.type !== 'AUTOFILL_NOW') return undefined;
+    // Every frame gets this message. Staying quiet in the ones without a form lets
+    // the frame that actually holds it own the reply.
+    if (!looksLikeApplicationForm()) return undefined;
     // Explicitly asked for, so show the panel without waiting on form detection.
     startAutofillUi();
     autofillNow()

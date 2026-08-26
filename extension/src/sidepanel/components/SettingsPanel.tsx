@@ -102,6 +102,21 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           />
           <span>Score automatically when I open a job on Jobright</span>
         </label>
+
+        <label className="row" style={{ gap: 6 }}>
+          <input
+            type="checkbox"
+            style={{ width: 'auto' }}
+            checked={draft.answerQuestions}
+            onChange={(event) => update({ answerQuestions: event.target.checked })}
+          />
+          <span>Answer screening questions during autofill</span>
+        </label>
+        <p className="small muted" style={{ margin: 0 }}>
+          Written from your resume for the job that is open, and left blank where your resume gives
+          no basis. Answers are outlined amber on the form — read them before submitting, and expect
+          to rewrite any question that asks for your own words.
+        </p>
       </div>
 
       <div className="card stack">

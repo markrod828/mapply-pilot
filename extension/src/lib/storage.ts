@@ -159,9 +159,15 @@ export async function getActiveJob(): Promise<JobRecord | null> {
 }
 
 export function onStorageChanged(listener: () => void): () => void {
-  const handler = (_changes: unknown, areaName: string) => {
-    if (areaName === 'local') listener();
+  const watched = new Set<string>(Object.values(KEYS));
+
+  const handler = (changes: Record<string, unknown>, areaName: string) => {
+    if (areaName !== 'local') return;
+    // Other things live in local storage too (the in-page panel's position, say),
+    // and reloading the whole panel for those is pure waste.
+    if (Object.keys(changes).some((key) => watched.has(key))) listener();
   };
+
   chrome.storage.onChanged.addListener(handler);
   return () => chrome.storage.onChanged.removeListener(handler);
 }

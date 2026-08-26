@@ -1,12 +1,6 @@
 import { scoreResume } from '../lib/atsScore';
 import { generateCoverLetter } from '../lib/coverLetter';
-import {
-  DEFAULT_RESUME_FILE,
-  blobToBase64,
-  coverLetterFile,
-  getFile,
-  tailoredResumeFile,
-} from '../lib/db';
+import { DEFAULT_RESUME_FILE, blobToBase64, getFile, tailoredResumeFile } from '../lib/db';
 import { hasHostAccess, originFor } from '../lib/hosts';
 import type { AutofillPayload, Message } from '../lib/messages';
 import {
@@ -20,7 +14,8 @@ import {
   setActiveJobKey,
   updateJob,
 } from '../lib/storage';
-import { coverLetterPdfName, resumeFileName } from '../lib/resumePdf';
+import { answerFormQuestions, type FormQuestion, type QuestionAnswer } from '../lib/questions';
+import { resumeFileName } from '../lib/resumePdf';
 import { refineResume, tailorResume } from '../lib/tailor';
 import type { AtsScore, JobPosting, JobRecord, TailorOptions } from '../lib/types';
 
@@ -74,14 +69,23 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
     case 'GET_AUTOFILL_PAYLOAD':
       return buildAutofillPayload();
 
+    case 'REQUEST_ANSWERS':
+      return runAnswers(message.questions);
+
     case 'RUN_AUTOFILL': {
       const tab = await chrome.tabs.get(message.tabId);
       await assertHostAccess(tab.url);
+      // Application forms are often embedded (Greenhouse serves /embed/job_app in an
+      // iframe), so every frame gets the script and only the one holding the form answers.
       await chrome.scripting.executeScript({
-        target: { tabId: message.tabId },
+        target: { tabId: message.tabId, allFrames: true },
         files: ['content.js'],
       });
-      await chrome.tabs.sendMessage(message.tabId, { type: 'AUTOFILL_NOW' });
+      try {
+        await chrome.tabs.sendMessage(message.tabId, { type: 'AUTOFILL_NOW' });
+      } catch {
+        throw new Error('No application form found on this page.');
+      }
       return { ok: true };
     }
 
@@ -203,29 +207,29 @@ async function runTailor(jobKey: string, options: TailorOptions) {
     options,
   });
 
-  await saveJob({ ...record, tailored, tailoredScore: undefined });
-
-  // The letter is written against the tailored resume, so it follows immediately.
-  // A failure here must not lose the rewrite that already succeeded.
-  try {
-    await writeCoverLetter(jobKey, tailored.text);
-  } catch (error) {
-    console.warn('Cover letter generation failed', error);
-  }
-
+  // The letter is written from the tailored resume, so the old one no longer matches.
+  // Autofill writes a fresh one when a form actually asks for it.
+  await saveJob({ ...record, tailored, tailoredScore: undefined, coverLetter: undefined });
   return { ok: true, tailored };
 }
 
-/** Regenerate on demand, e.g. after refining the resume or editing the letter. */
-async function runCoverLetter(jobKey: string) {
-  const record = await getJob(jobKey);
-  if (!record) return { ok: false, error: 'That job is no longer cached. Reopen it on Jobright.' };
+/**
+ * Written on demand, when autofill finds a form asking for one. Cached against the
+ * job so filling the same form twice neither pays twice nor reworders itself.
+ */
+async function runCoverLetter(jobKey?: string) {
+  const record = jobKey ? await getJob(jobKey) : await getActiveJob();
+  if (!record) return { ok: false, error: 'Open the job on Jobright first so the letter matches it.' };
+  if (record.coverLetter) return { ok: true, coverLetter: record.coverLetter };
+
+  const settings = await getSettings();
+  if (!settings.openaiApiKey) return { ok: false, error: 'No OpenAI API key set.' };
 
   const resume = await getResume();
   const source = record.tailored?.text ?? resume?.text;
   if (!source) return { ok: false, error: 'Upload your default resume first.' };
 
-  const coverLetter = await writeCoverLetter(jobKey, source);
+  const coverLetter = await writeCoverLetter(record.job.jobKey, source);
   return { ok: true, coverLetter };
 }
 
@@ -263,7 +267,8 @@ async function runRefine(jobKey: string, instruction: string) {
     instruction,
   });
 
-  await saveJob({ ...record, tailored, tailoredScore: undefined });
+  // Refining changes the resume the letter was written from, so drop it too.
+  await saveJob({ ...record, tailored, tailoredScore: undefined, coverLetter: undefined });
   return { ok: true, tailored };
 }
 
@@ -282,6 +287,58 @@ async function runTailoredScore(jobKey: string) {
 
   await updateJob(jobKey, (current) => ({ ...current, tailoredScore: score }));
   return { ok: true, score };
+}
+
+/**
+ * Answer the screening questions a form asks, grounded in the resume for the job
+ * that is open. Answers are cached on the job so re-running autofill on the same
+ * form does not pay for them twice or word them differently.
+ */
+async function runAnswers(questions: FormQuestion[]) {
+  const settings = await getSettings();
+  if (!settings.answerQuestions) return { ok: true, answers: [] };
+  if (!settings.openaiApiKey) return { ok: false, error: 'No OpenAI API key set.' };
+
+  const record = await getActiveJob();
+  if (!record) return { ok: false, error: 'Open the job on Jobright first so answers match it.' };
+
+  const resume = await getResume();
+  const resumeText = record.tailored?.text ?? resume?.text;
+  if (!resumeText) return { ok: false, error: 'Upload your default resume first.' };
+
+  const cached = new Map((record.answers ?? []).map((entry) => [entry.question, entry.answer]));
+  const answers: QuestionAnswer[] = [];
+  const unanswered: FormQuestion[] = [];
+
+  for (const question of questions) {
+    const hit = cached.get(question.label);
+    if (hit) answers.push({ id: question.id, answer: hit });
+    else unanswered.push(question);
+  }
+
+  if (unanswered.length) {
+    const fresh = await answerFormQuestions({
+      apiKey: settings.openaiApiKey,
+      model: settings.tailorModel,
+      job: record.job,
+      profile: await getProfile(),
+      resumeText,
+      questions: unanswered,
+    });
+
+    const byId = new Map(unanswered.map((question) => [question.id, question.label]));
+    await updateJob(record.job.jobKey, (current) => ({
+      ...current,
+      answers: [
+        ...(current.answers ?? []),
+        ...fresh.map((entry) => ({ question: byId.get(entry.id) ?? '', answer: entry.answer })),
+      ].filter((entry) => entry.question),
+    }));
+
+    answers.push(...fresh);
+  }
+
+  return { ok: true, answers };
 }
 
 async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; payload?: AutofillPayload }> {
@@ -312,15 +369,10 @@ async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; pa
 
   const usingTailored = Boolean(tailored) && !tailoredUnavailable;
 
-  const coverLetterBlob = record?.coverLetter ? await getFile(coverLetterFile(record.job.jobKey)) : undefined;
-
   return {
     ok: true,
     payload: {
       profile,
-      coverLetterText: record?.coverLetter?.text ?? '',
-      coverLetterFileName: coverLetterPdfName(profile, record?.job.company ?? ''),
-      coverLetterFileBase64: coverLetterBlob ? await blobToBase64(coverLetterBlob) : '',
       // Kept in step with the attached file, so a form never gets tailored text
       // pasted next to the original PDF.
       resumeText: (usingTailored ? tailored?.text : resume?.text) ?? '',

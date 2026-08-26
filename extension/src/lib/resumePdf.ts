@@ -311,9 +311,3 @@ export function resumeFileName(profile: Profile, company: string): string {
   const org = company.replace(/[^a-z0-9]/gi, '').slice(0, 24);
   return org ? `${name}-${org}-Resume.pdf` : `${name}-Resume.pdf`;
 }
-
-export function coverLetterPdfName(profile: Profile, company: string): string {
-  const name = `${profile.firstName}${profile.lastName}`.replace(/[^a-z0-9]/gi, '') || 'Cover';
-  const org = company.replace(/[^a-z0-9]/gi, '').slice(0, 24);
-  return org ? `${name}-${org}-CoverLetter.pdf` : `${name}-CoverLetter.pdf`;
-}
