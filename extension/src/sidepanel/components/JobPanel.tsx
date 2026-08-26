@@ -147,6 +147,7 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
           {tailored
             ? 'Autofill attaches your tailored resume for this job, including edits you have not accepted.'
             : 'Autofill attaches your default resume. Tailor one for this job to send the improved version.'}
+          {record.coverLetter && ' Your cover letter is pasted or attached wherever the form asks for one.'}
         </div>
       </div>
 

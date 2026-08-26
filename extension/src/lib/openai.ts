@@ -9,10 +9,26 @@ interface ChatOptions {
   user: string;
   temperature?: number;
   maxTokens?: number;
+  /** Advice to show if the model runs out of room mid-answer. */
+  truncationHint?: string;
 }
 
 /** Calls OpenAI chat completions in JSON mode and returns the parsed object. */
 export async function chatJson<T>(options: ChatOptions): Promise<T> {
+  const content = await chatCompletion(options, true);
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    throw new OpenAiError('OpenAI returned malformed JSON.');
+  }
+}
+
+/** Same call, for prompts whose answer is prose rather than a structure. */
+export function chatText(options: ChatOptions): Promise<string> {
+  return chatCompletion(options, false).then((content) => content.trim());
+}
+
+async function chatCompletion(options: ChatOptions, json: boolean): Promise<string> {
   if (!options.apiKey) {
     throw new OpenAiError('No OpenAI API key set. Add one in ApplyPilot settings.');
   }
@@ -29,7 +45,7 @@ export async function chatJson<T>(options: ChatOptions): Promise<T> {
         model: options.model,
         temperature: options.temperature ?? 0.2,
         max_tokens: options.maxTokens ?? 2000,
-        response_format: { type: 'json_object' },
+        ...(json ? { response_format: { type: 'json_object' } } : {}),
         messages: [
           { role: 'system', content: options.system },
           { role: 'user', content: options.user },
@@ -54,15 +70,14 @@ export async function chatJson<T>(options: ChatOptions): Promise<T> {
   }
   if (choice?.finish_reason === 'length') {
     throw new OpenAiError(
-      'The response was cut off before it finished. Try "Quick edit" instead of "Full edit", or shorten your resume text.',
+      `The response was cut off before it finished. ${
+        options.truncationHint ??
+        'Try "Quick edit" instead of "Full edit", or shorten your resume text.'
+      }`,
     );
   }
 
-  try {
-    return JSON.parse(content) as T;
-  } catch {
-    throw new OpenAiError('OpenAI returned malformed JSON.');
-  }
+  return content;
 }
 
 async function describeFailure(response: Response): Promise<string> {

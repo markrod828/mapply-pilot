@@ -9,7 +9,7 @@ export interface FieldRule {
   longForm?: boolean;
 }
 
-export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
+export function buildRules(profile: Profile, resumeText: string, coverLetter = ''): FieldRule[] {
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
 
@@ -77,6 +77,14 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
       key: 'resumeText',
       test: /paste (your )?(resume|cv)|resume text|cv text/,
       value: resumeText,
+      longForm: true,
+    },
+    {
+      key: 'coverLetter',
+      test: /cover ?letter|letter of interest|motivation letter/,
+      // "Upload a cover letter" labels a file input, not somewhere to type one.
+      exclude: /upload|attach|file|resume|cv/,
+      value: coverLetter,
       longForm: true,
     },
   ];

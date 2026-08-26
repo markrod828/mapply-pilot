@@ -192,11 +192,18 @@ export interface Settings {
   saveDirectoryName: string;
 }
 
+export interface CoverLetter {
+  /** The letter body, from "Dear …" to the sign-off. Plain text. */
+  text: string;
+  createdAt: number;
+}
+
 export interface JobRecord {
   job: JobPosting;
   baseScore?: AtsScore;
   tailoredScore?: AtsScore;
   tailored?: TailoredResume;
+  coverLetter?: CoverLetter;
   /** Hash of the resume text used for baseScore, so stale caches are refreshed. */
   baseResumeHash?: string;
 }

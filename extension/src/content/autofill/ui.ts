@@ -98,6 +98,10 @@ function renderResult(result: AutofillResult): string {
       : 'No resume upload field found.',
   ];
 
+  if (result.coverLetterAttached) {
+    lines.push('Cover letter attached.');
+  }
+
   if (result.resumeWarning) {
     lines.push(`<span class="warn">${escapeHtml(result.resumeWarning)}</span>`);
   }

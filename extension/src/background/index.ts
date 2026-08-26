@@ -1,5 +1,12 @@
 import { scoreResume } from '../lib/atsScore';
-import { DEFAULT_RESUME_FILE, blobToBase64, getFile, tailoredResumeFile } from '../lib/db';
+import { generateCoverLetter } from '../lib/coverLetter';
+import {
+  DEFAULT_RESUME_FILE,
+  blobToBase64,
+  coverLetterFile,
+  getFile,
+  tailoredResumeFile,
+} from '../lib/db';
 import { hasHostAccess, originFor } from '../lib/hosts';
 import type { AutofillPayload, Message } from '../lib/messages';
 import {
@@ -13,7 +20,7 @@ import {
   setActiveJobKey,
   updateJob,
 } from '../lib/storage';
-import { resumeFileName } from '../lib/resumePdf';
+import { coverLetterPdfName, resumeFileName } from '../lib/resumePdf';
 import { refineResume, tailorResume } from '../lib/tailor';
 import type { AtsScore, JobPosting, JobRecord, TailorOptions } from '../lib/types';
 
@@ -57,6 +64,9 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'REQUEST_RESCORE_TAILORED':
       return runTailoredScore(message.jobKey);
+
+    case 'REQUEST_COVER_LETTER':
+      return runCoverLetter(message.jobKey);
 
     case 'GET_ACTIVE_JOB':
       return { ok: true, record: await getActiveJob() };
@@ -194,7 +204,47 @@ async function runTailor(jobKey: string, options: TailorOptions) {
   });
 
   await saveJob({ ...record, tailored, tailoredScore: undefined });
+
+  // The letter is written against the tailored resume, so it follows immediately.
+  // A failure here must not lose the rewrite that already succeeded.
+  try {
+    await writeCoverLetter(jobKey, tailored.text);
+  } catch (error) {
+    console.warn('Cover letter generation failed', error);
+  }
+
   return { ok: true, tailored };
+}
+
+/** Regenerate on demand, e.g. after refining the resume or editing the letter. */
+async function runCoverLetter(jobKey: string) {
+  const record = await getJob(jobKey);
+  if (!record) return { ok: false, error: 'That job is no longer cached. Reopen it on Jobright.' };
+
+  const resume = await getResume();
+  const source = record.tailored?.text ?? resume?.text;
+  if (!source) return { ok: false, error: 'Upload your default resume first.' };
+
+  const coverLetter = await writeCoverLetter(jobKey, source);
+  return { ok: true, coverLetter };
+}
+
+async function writeCoverLetter(jobKey: string, resumeText: string) {
+  const settings = await getSettings();
+  const profile = await getProfile();
+  const record = await getJob(jobKey);
+  if (!record) throw new Error('That job is no longer cached.');
+
+  const coverLetter = await generateCoverLetter({
+    apiKey: settings.openaiApiKey,
+    model: settings.tailorModel,
+    job: record.job,
+    profile,
+    resumeText,
+  });
+
+  await updateJob(jobKey, (current) => ({ ...current, coverLetter }));
+  return coverLetter;
 }
 
 async function runRefine(jobKey: string, instruction: string) {
@@ -262,10 +312,15 @@ async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; pa
 
   const usingTailored = Boolean(tailored) && !tailoredUnavailable;
 
+  const coverLetterBlob = record?.coverLetter ? await getFile(coverLetterFile(record.job.jobKey)) : undefined;
+
   return {
     ok: true,
     payload: {
       profile,
+      coverLetterText: record?.coverLetter?.text ?? '',
+      coverLetterFileName: coverLetterPdfName(profile, record?.job.company ?? ''),
+      coverLetterFileBase64: coverLetterBlob ? await blobToBase64(coverLetterBlob) : '',
       // Kept in step with the attached file, so a form never gets tailored text
       // pasted next to the original PDF.
       resumeText: (usingTailored ? tailored?.text : resume?.text) ?? '',

@@ -6,8 +6,10 @@ A Chrome side-panel extension that assists job applications on [jobright.ai](htt
    breakdown of keyword coverage, skills overlap, title/experience alignment and must-haves.
 2. **Tailored resume** — rewrite your resume toward that job description, edit the draft, accept it,
    and see the new ATS score next to the original.
-3. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
-   your profile and the accepted tailored resume.
+3. **Cover letter** — written automatically alongside the tailored resume, for that specific company
+   and posting, and editable before it goes anywhere.
+4. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
+   your profile, the tailored resume and the cover letter.
 
 Nothing is submitted automatically. ApplyPilot fills fields and stops; you review and press submit.
 
@@ -66,6 +68,8 @@ In the side panel:
      **Preview** (formatted, with inserted keywords highlighted, plus the template switcher),
      **Changes** (a line-by-line comparison against your original) and **Edit**. There is also a
      "tweak with AI" box for follow-up instructions.
+   A **cover letter** for this company and posting is written as soon as the tailored resume is,
+   using that resume as the source. Read it, edit it in place, regenerate it, or save it as a PDF.
    Then **Accept & re-score** to see what the rewrite did to your score. Autofill already
    attaches the draft you are looking at, edits included — accepting is about the score, not
    about making the resume uploadable.
@@ -96,6 +100,8 @@ extension/
       resumeDiff.ts         pairs each rewritten line with the original it came from
       savePath.ts           resumes/{company}/{job title}/{name}.pdf, sanitised
       saveLocation.ts       chosen-folder writes, falling back to Downloads
+      coverLetter.ts        cover letter prompt and generation
+      coverLetterPdf.ts     business-letter PDF in the resume's type
     sidepanel/              React UI (Job, Resume, Profile, Settings tabs)
 ```
 
@@ -119,6 +125,12 @@ extension/
   reflects what was actually written rather than what the model claimed.
 - "What changed" counts are computed by diffing the draft against your original resume, not taken
   from the model's self-report.
+- The cover letter is written from the tailored resume plus the posting, and is held to the same
+  rule as the rewrite: no invented statistics, accomplishments, qualifications or personal
+  connection to the company. It aims at 250–400 words in 3–5 paragraphs, opens with the position and
+  your strongest relevant qualification, and addresses "Dear Hiring Manager," rather than guessing a
+  name. Autofill pastes it into a cover-letter textarea and attaches the PDF where a form wants a
+  file; labels like "upload cover letter" are left to the file input rather than typed into.
 - The **Changes** view compares the draft with your original resume in code, not by asking the model
   what it did. Your original is plain text with no sections, so each new bullet is paired with the
   line it most resembles and diffed word by word: new wording is green, wording it replaced is
@@ -139,7 +151,8 @@ resumes/{company}/{job title}/{your full name}.pdf
 
 Illegal path characters are stripped from the company and title, long names are shortened, and
 empty ones become `Unknown company` / `Unknown role`. Saving the same job twice overwrites that
-file rather than piling up copies.
+file rather than piling up copies. A saved cover letter lands beside it as
+`{your full name} - Cover Letter.pdf`.
 
 By default this tree sits in your **Downloads** folder, because that is the only place a Chrome
 extension can write on its own — the downloads API rejects absolute paths and `..`, so

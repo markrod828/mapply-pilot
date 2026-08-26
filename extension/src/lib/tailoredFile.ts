@@ -1,7 +1,8 @@
-import { putFile, tailoredResumeFile } from './db';
+import { buildCoverLetterPdf } from './coverLetterPdf';
+import { coverLetterFile, putFile, tailoredResumeFile } from './db';
 import { buildResumePdf } from './resumePdf';
 import { renderResumeText } from './tailor';
-import type { Profile, ResumeTemplate, TailoredResume } from './types';
+import type { JobPosting, Profile, ResumeTemplate, TailoredResume } from './types';
 
 /**
  * Render the draft and store it as the file autofill attaches for this job.
@@ -21,4 +22,15 @@ export async function storeTailoredPdf(
 ): Promise<void> {
   const pdf = await buildResumePdf(profile, { ...resume, text: renderResumeText(resume) }, template);
   await putFile(tailoredResumeFile(jobKey), pdf);
+}
+
+/** Same idea for the cover letter, so autofill can attach it as a file. */
+export async function storeCoverLetterPdf(
+  job: JobPosting,
+  profile: Profile,
+  letter: string,
+  template: ResumeTemplate,
+): Promise<void> {
+  const pdf = await buildCoverLetterPdf(profile, job, letter, template);
+  await putFile(coverLetterFile(job.jobKey), pdf);
 }

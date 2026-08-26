@@ -17,6 +17,7 @@ export interface AutofillResult {
   filled: string[];
   skipped: string[];
   resumeAttached: boolean;
+  coverLetterAttached: boolean;
   /** Which resume went up, e.g. "tailored resume for Platform Engineer". */
   resumeLabel: string;
   /** Set when the tailored draft could not be attached and the default went up instead. */
@@ -31,6 +32,7 @@ export function runAutofill(payload: AutofillPayload): AutofillResult {
     filled: [],
     skipped: [],
     resumeAttached: false,
+    coverLetterAttached: false,
     resumeLabel: payload.resumeLabel,
     resumeWarning: payload.tailoredUnavailable
       ? 'Your tailored resume has no saved PDF yet, so the default went up. Open ApplyPilot on this job, then autofill again.'
@@ -43,7 +45,7 @@ export function runAutofill(payload: AutofillPayload): AutofillResult {
   applyRules(payload, handled, result);
   applyChoiceGroups(payload, handled, result);
   applyScreeningAnswers(payload, handled, result);
-  attachResume(payload, result);
+  attachFiles(payload, result);
   collectUnfilled(handled, result);
 
   return result;
@@ -69,7 +71,7 @@ function applyAdapter(payload: AutofillPayload, handled: Set<Fillable>, result: 
 }
 
 function applyRules(payload: AutofillPayload, handled: Set<Fillable>, result: AutofillResult) {
-  const rules = buildRules(payload.profile, payload.resumeText);
+  const rules = buildRules(payload.profile, payload.resumeText, payload.coverLetterText);
 
   for (const element of collectFields()) {
     if (handled.has(element) || hasValue(element)) continue;
@@ -166,24 +168,38 @@ function applyScreeningAnswers(payload: AutofillPayload, handled: Set<Fillable>,
   }
 }
 
-function attachResume(payload: AutofillPayload, result: AutofillResult) {
-  if (!payload.resumeFileBase64) return;
-
+function attachFiles(payload: AutofillPayload, result: AutofillResult) {
   const fileInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).filter(
     (input) => !input.disabled,
   );
   if (!fileInputs.length) return;
 
-  const resumeInput =
-    fileInputs.find((input) => /resume|cv/i.test(describeField(input))) ??
-    (fileInputs.length === 1 ? fileInputs[0] : undefined);
-  if (!resumeInput) return;
+  const coverInputs = fileInputs.filter((input) => /cover ?letter/i.test(describeField(input)));
+  const resumeInputs = fileInputs.filter((input) => !coverInputs.includes(input));
 
-  const blob = base64ToBlob(payload.resumeFileBase64, payload.resumeFileMime);
-  const file = new File([blob], payload.resumeFileName, { type: payload.resumeFileMime });
-  if (attachFile(resumeInput, file)) {
-    result.resumeAttached = true;
-    result.filled.push(payload.usingTailored ? 'tailored resume' : 'resume');
+  if (payload.resumeFileBase64) {
+    const resumeInput =
+      resumeInputs.find((input) => /resume|cv/i.test(describeField(input))) ??
+      (resumeInputs.length === 1 ? resumeInputs[0] : undefined);
+
+    if (resumeInput) {
+      const blob = base64ToBlob(payload.resumeFileBase64, payload.resumeFileMime);
+      const file = new File([blob], payload.resumeFileName, { type: payload.resumeFileMime });
+      if (attachFile(resumeInput, file)) {
+        result.resumeAttached = true;
+        result.filled.push(payload.usingTailored ? 'tailored resume' : 'resume');
+      }
+    }
+  }
+
+  const coverInput = coverInputs[0];
+  if (coverInput && payload.coverLetterFileBase64) {
+    const blob = base64ToBlob(payload.coverLetterFileBase64, 'application/pdf');
+    const file = new File([blob], payload.coverLetterFileName, { type: 'application/pdf' });
+    if (attachFile(coverInput, file)) {
+      result.coverLetterAttached = true;
+      result.filled.push('cover letter');
+    }
   }
 }
 

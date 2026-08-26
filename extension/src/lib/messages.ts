@@ -8,6 +8,11 @@ export interface AutofillPayload {
   resumeFileBase64: string;
   resumeFileMime: string;
   usingTailored: boolean;
+  /** Cover letter body for textarea fields; empty when none has been generated. */
+  coverLetterText: string;
+  coverLetterFileName: string;
+  /** base64 (no data: prefix) of the cover letter PDF, when one has been stored. */
+  coverLetterFileBase64: string;
   /** Human-readable description of the file being attached, shown in the page panel. */
   resumeLabel: string;
   /** A tailored draft exists for this job but has no stored PDF, so the default went up. */
@@ -22,6 +27,7 @@ export type Message =
   | { type: 'REQUEST_TAILOR'; jobKey: string; options: TailorOptions }
   | { type: 'REQUEST_REFINE'; jobKey: string; instruction: string }
   | { type: 'REQUEST_RESCORE_TAILORED'; jobKey: string }
+  | { type: 'REQUEST_COVER_LETTER'; jobKey: string }
   | { type: 'GET_ACTIVE_JOB' }
   | { type: 'GET_AUTOFILL_PAYLOAD' }
   | { type: 'RUN_AUTOFILL'; tabId: number }
