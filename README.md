@@ -1,1 +1,143 @@
-# mapply-pilot
+# ApplyPilot
+
+A Chrome side-panel extension that assists job applications on [jobright.ai](https://jobright.ai):
+
+1. **ATS score** — open a job and ApplyPilot scores your default resume against it (0–100) with a
+   breakdown of keyword coverage, skills overlap, title/experience alignment and must-haves.
+2. **Tailored resume** — rewrite your resume toward that job description, edit the draft, accept it,
+   and see the new ATS score next to the original.
+3. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
+   your profile and the accepted tailored resume.
+
+Nothing is submitted automatically. ApplyPilot fills fields and stops; you review and press submit.
+
+## Requirements
+
+- Node.js 20+ (built and tested on Node 22)
+- Google Chrome 116+ (side panel API)
+- An OpenAI API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+## Build and install
+
+```bash
+cd extension
+npm install
+npm run build
+```
+
+Then load it in Chrome:
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select `extension/dist`
+4. Pin ApplyPilot and click the icon to open the side panel
+
+During development, `npm run dev` rebuilds the pages on change; re-run `npm run build` when you touch
+files under `src/content/` (content scripts are a separate bundle), and hit reload on the extensions
+page to pick up changes.
+
+## First-time setup
+
+In the side panel:
+
+- **Settings** — paste your OpenAI API key. Default models are `gpt-4o-mini` for scoring and `gpt-4o`
+  for tailoring. Leave "score automatically" on to score every job you open.
+- **Resume** — upload your default resume PDF. The text is extracted locally; correct any extraction
+  glitches in the text box, since that text is what gets scored and tailored. The original PDF stays
+  on your machine and is attached by autofill when you have not tailored a version.
+- **Profile** — contact details, links, work authorization and reusable screening answers.
+
+## Daily use
+
+1. Browse jobs on jobright.ai. Opening a posting shows an ATS score badge in the page corner and on
+   the toolbar icon.
+2. Click the badge to open the side panel: buckets, matched keywords, missing keywords and unmet
+   must-haves.
+3. Work the three-step tailoring wizard:
+   - **See your difference** — verdict, gauge, and a job-vs-resume table (job title, years of
+     experience, industry, education) plus the ATS keyword list showing matched vs missing.
+   - **Align your resume** — pick which sections to enhance (summary, skills, work experience with
+     quick or full depth, projects) and tick the missing keywords to add. Add your own keywords too.
+   - **Review your new resume** — before/after score, what changed, a formatted preview with the
+     inserted keywords highlighted, a template switcher, an editor, and a "tweak with AI" box for
+     follow-up instructions.
+   Then **Accept & re-score** to store an ATS-friendly PDF and lock it in for autofill.
+4. Open the application form and click **Autofill this application** in the page panel, or **Autofill
+   this page** in the side panel. Filled fields are outlined; still-required fields are listed.
+5. Check every field, then submit yourself.
+
+## How it works
+
+```
+extension/
+  public/manifest.json      MV3 manifest
+  sidepanel.html            side panel entry
+  src/
+    background/             service worker: scoring, tailoring, autofill payloads, badges
+    content/
+      extract.ts            JSON-LD + DOM job description extraction
+      jobright.ts           SPA-aware job detection and score overlay
+      autofill/             field matching, site adapters, fill engine, in-page panel
+    lib/                    types, storage, OpenAI client, ATS rubric, tailor prompt, PDF in/out
+    sidepanel/              React UI (Job, Resume, Profile, Settings tabs)
+```
+
+- Job data comes from the page you are already viewing (JSON-LD `JobPosting` when present, otherwise
+  the largest description-like block). No private Jobright APIs are called.
+- Scores are cached per job and per resume version, so reopening a job is instant and editing your
+  resume invalidates stale scores.
+- Scoring is calibrated to bands rather than left open-ended, so it does not drift optimistic, and
+  anything under 60 is flagged as likely to be filtered before a human reads it. Role fit is judged
+  on the work the resume describes rather than job-title strings, and only a genuinely unmet hard
+  requirement caps the score (at 55) — otherwise tailoring could never move the number.
+- The review step also shows keyword coverage as a plain before/after count, measured in code
+  against the same keyword list the original score used, so it is comparable even when the model's
+  own number moves around.
+- Tailoring is keyword-driven: you choose the target keywords, and each one is either worked into
+  the text (using the job's exact term in place of your weaker synonym) or reported as omitted with
+  a reason. Coverage is then re-checked in code against the draft you are reading, so the panel
+  reflects what was actually written rather than what the model claimed.
+- "What changed" counts are computed by diffing the draft against your original resume, not taken
+  from the model's self-report.
+- The prompt forbids inventing employers, titles, dates, degrees or metrics, and sections you did
+  not select are reproduced verbatim. Keywords you tick are treated as true. Read the draft before
+  you accept it — you are responsible for every claim on your resume.
+
+## Resume templates
+
+Two templates are available from the review step or the Settings tab, and the choice applies to the
+PDF you download and the file autofill attaches:
+
+- **Classic** — centred serif header with ruled section headings, for conservative industries.
+- **Modern** — left-aligned sans-serif with a coloured role headline, for tech and startups.
+
+Both are deliberately single-column with no tables, text boxes, columns or graphics, so a parser
+still reads them top to bottom. The preview mirrors the PDF layout, with:
+
+- job title / company / dates as a clear hierarchy
+- skills in labelled groups (Languages, Frontend, Backend, …)
+- stripped bullet markers so you never see `• • Designed…`
+- education as school + degree lines, and certifications as a compact single line
+
+The tailor prompt also follows recruiter best practices (easy scanning, accomplishment bullets with
+truthful metrics, strong action verbs, ≤18 believable skills, standard ATS section names, and
+one-page targets for early-career resumes) while preserving every original role: about 6–8 bullets
+for the most recent role, 5–6 for the second, and 3–4 for older ones. Company names and date ranges
+stay locked; only role titles and bullet content are rewritten. Measurable results from your original
+resume are visually emphasized in the preview.
+
+## Privacy
+
+Your resume, profile and job history are stored locally (`chrome.storage.local` and IndexedDB). The
+only network calls ApplyPilot makes are to `api.openai.com` with your key, sent from the service
+worker so the key is never exposed to page scripts.
+
+## Limits
+
+- Jobright discovery only; other boards are not scanned.
+- Autofill adapters cover Greenhouse, Lever, Ashby and Rippling; other ATS forms use label
+  heuristics and will leave unusual fields blank. For unknown hosts, Chrome may prompt once to
+  grant site access before autofill can run.
+- File attachment works where the form uses a real `<input type="file">`; drag-and-drop-only widgets
+  need a manual upload.
+- No auto-submit, no CAPTCHA handling, no cloud sync.

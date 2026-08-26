@@ -1,0 +1,752 @@
+import { truncate } from './atsScore';
+import { chatJson } from './openai';
+import {
+  ACTION_VERBS,
+  RESUME_BUILD_RULES,
+  hasWeakBullets,
+  pageLengthHint,
+  polishStructuredResume,
+} from './resumeBuildRules';
+import { parseRoleHeading, stripBulletPrefix } from './resumeFormat';
+import type {
+  AtsScore,
+  EducationEntry,
+  ExperienceEntry,
+  JobPosting,
+  ProjectEntry,
+  ResumeSection,
+  SkillGroup,
+  TailorOptions,
+  TailorStats,
+  TailoredResume,
+} from './types';
+
+const RULES = `Hard rules:
+- Never invent employers, dates, degrees, certifications or metrics.
+- EXPERIENCE IS LOCKED FOR COUNT, COMPANY AND DATES:
+  - Keep every work experience from the original resume. Same number of roles, same order
+    (most recent first).
+  - Copy company and start-end dates EXACTLY from the LOCKED EXPERIENCE SKELETON. Do not merge,
+    drop, rename, invent or reorder employers, and do not change date ranges.
+  - You MAY update the role title (positioning toward the target job) and rewrite bullet content.
+- Reproduce education and certifications fully - never drop them. A missing degree looks like a gap.
+- The headline is positioning, not a claimed past title. Prefer:
+  "{Target Role} | {2-4 strongest stack keywords}" e.g.
+  "Full-Stack Engineer | React/TypeScript | Java/Spring Boot | AWS"
+  Align the summary with that same story so frontend and backend claims match the bullets.
+- Write ATS-friendly plain text: no tables, columns, graphics or special characters.
+- Bullets must NOT start with "-", "•", "*", or any other marker - the renderer adds bullets.
+- Keep bullets under 28 words. Prefer impact + tech over laundry lists of duties.`;
+
+const DENSITY = `Density and structure (recruiters scan; do not dump everything):
+- Experience bullet counts by role order (most recent first):
+  - Role 1 (most recent): 6-8 strong bullets
+  - Role 2: 5-6 strong bullets
+  - Role 3 and older: 3-4 strong bullets each
+  If the original role has fewer bullets than the target, keep what is true - never invent work.
+- Each project: 2-3 impactful bullets max.
+- Skills: group into categories such as Languages, Frontend, Backend, Cloud/DevOps, Databases,
+  Testing, Tools. Put 4-8 items per group. Prefer the job's vocabulary where truthful.
+- Education: one compact entry per school (school, location, degree, year). Put coursework in
+  details only if short; otherwise omit.
+- Certifications: a flat list of short strings, one credential per item.`;
+
+const SYSTEM_PROMPT = `You rewrite a candidate's existing resume into a polished, recruiter-readable
+software-engineering resume that also ranks well in an ATS keyword screen - without inventing facts.
+
+${RESUME_BUILD_RULES}
+
+Your main job is keyword coverage. The candidate has picked the TARGET KEYWORDS they want added and
+has confirmed they genuinely have them. For each target keyword:
+- Place the exact term in the matching skill group when it is a skill or tool.
+- Rewrite the most relevant bullet or the summary to use the job's exact term.
+- If covering it would require inventing unsupported facts, leave it out and report it in
+  omittedKeywords with a short reason.
+
+Prefer opening bullets with strong action verbs such as: ${ACTION_VERBS.slice(0, 12).join(', ')}.
+
+${RULES}
+
+${DENSITY}
+
+Respond ONLY with JSON of the shape:
+{
+  "headline": string,
+  "summary": string,
+  "skillGroups": [{ "category": string, "items": string[] }],
+  "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }],
+  "projects": [{ "name": string, "bullets": string[] }],
+  "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
+  "certifications": string[],
+  "addedKeywords": string[],
+  "omittedKeywords": [{ "keyword": string, "reason": string }],
+  "changeNotes": string[]
+}
+The experience array MUST have the same length and order as the LOCKED EXPERIENCE SKELETON, with
+identical company and dates fields. summary is 2-3 sentences that open with the target role and real
+years of experience, and stay consistent with the headline stack. Every target keyword must appear
+in either addedKeywords or omittedKeywords. changeNotes lists at most 6 short notes on what you
+changed.`;
+
+const REFINE_PROMPT = `You are editing a resume that was already tailored for a specific job, following
+one instruction from the candidate. Apply the instruction and change nothing else.
+
+${RESUME_BUILD_RULES}
+
+Prefer opening bullets with strong action verbs such as: ${ACTION_VERBS.slice(0, 12).join(', ')}.
+
+${RULES}
+
+${DENSITY}
+
+Respond ONLY with JSON of the same shape you were given:
+{
+  "headline": string,
+  "summary": string,
+  "skillGroups": [{ "category": string, "items": string[] }],
+  "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }],
+  "projects": [{ "name": string, "bullets": string[] }],
+  "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
+  "certifications": string[],
+  "addedKeywords": string[],
+  "omittedKeywords": [{ "keyword": string, "reason": string }],
+  "changeNotes": string[]
+}
+Preserve every experience entry with the same company and dates. changeNotes should describe only
+what this instruction changed.`;
+
+const EXTRACT_EXPERIENCE_PROMPT = `Extract every paid work experience from this resume, most recent first.
+Do not invent roles. Copy company names and date ranges exactly as written.
+Respond ONLY with JSON:
+{ "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }] }
+Include the original bullets (without leading bullet markers). If a field is missing, use "".`;
+
+interface RawTailored {
+  headline?: unknown;
+  summary?: unknown;
+  skillGroups?: unknown;
+  skills?: unknown;
+  experience?: unknown;
+  projects?: unknown;
+  education?: unknown;
+  certifications?: unknown;
+  sections?: unknown;
+  changeNotes?: unknown;
+  addedKeywords?: unknown;
+  omittedKeywords?: unknown;
+}
+
+export interface TailorRequest {
+  apiKey: string;
+  model: string;
+  resumeText: string;
+  job: JobPosting;
+  baseScore?: AtsScore;
+  options: TailorOptions;
+}
+
+export async function tailorResume(request: TailorRequest): Promise<TailoredResume> {
+  const targets = request.options.selectedKeywords.map((item) => item.trim()).filter(Boolean);
+  const { sections, workExperienceDepth } = request.options;
+
+  const skeleton = await extractExperienceSkeleton({
+    apiKey: request.apiKey,
+    model: request.model,
+    resumeText: request.resumeText,
+  });
+
+  const selectedSections = [
+    sections.summary && 'Summary',
+    sections.skills && 'Skills (grouped categories)',
+    sections.workExperience &&
+      (workExperienceDepth === 'quick'
+        ? 'Work Experience (rewrite titles/bullets for the two most recent roles; keep older role bullets truthful and within density caps; NEVER drop any role)'
+        : 'Work Experience (rewrite titles/bullets for every role within density caps; NEVER drop any role)'),
+    sections.projects && 'Projects (2-3 bullets each)',
+  ].filter(Boolean) as string[];
+
+  const lockedSkeleton = skeleton.length
+    ? [
+        '',
+        `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — copy company + dates exactly; keep this count and order):`,
+        JSON.stringify(
+          skeleton.map((role, index) => ({
+            index: index + 1,
+            title: role.title,
+            company: role.company,
+            dates: role.dates,
+            originalBulletCount: role.bullets.length,
+            targetBulletRange:
+              index === 0 ? '6-8' : index === 1 ? '5-6' : '3-4',
+            targetBulletCount: bulletCapForRole(index),
+          })),
+          null,
+          2,
+        ),
+      ]
+    : [];
+
+  const user = [
+    `JOB TITLE: ${request.job.title || 'Unknown'}`,
+    `COMPANY: ${request.job.company || 'Unknown'}`,
+    `LOCATION: ${request.job.location || 'Unknown'}`,
+    '',
+    'JOB DESCRIPTION:',
+    truncate(request.job.description, 12000),
+    '',
+    `SECTIONS TO ENHANCE: ${selectedSections.join('; ') || 'none - keep the resume as is'}`,
+    '',
+    `TARGET KEYWORDS (${targets.length}) - cover each one or explain the omission:`,
+    targets.map((keyword) => `- ${keyword}`).join('\n') || '- none',
+    '',
+    `UNMET MUST-HAVES: ${request.baseScore?.mustHaveGaps.join(', ') || 'none'}`,
+    '',
+    pageLengthHint(skeleton.length),
+    ...lockedSkeleton,
+    '',
+    'ORIGINAL RESUME:',
+    truncate(request.resumeText, 14000),
+  ].join('\n');
+
+  const raw = await chatJson<RawTailored>({
+    apiKey: request.apiKey,
+    model: request.model,
+    system: SYSTEM_PROMPT,
+    user,
+    temperature: 0.3,
+    maxTokens: 8000,
+  });
+
+  return buildTailored(raw, {
+    jobKey: request.job.jobKey,
+    originalText: request.resumeText,
+    targets,
+    options: request.options,
+    refinements: [],
+    experienceSkeleton: skeleton,
+  });
+}
+
+export interface RefineRequest {
+  apiKey: string;
+  model: string;
+  resumeText: string;
+  job: JobPosting;
+  current: TailoredResume;
+  instruction: string;
+}
+
+export async function refineResume(request: RefineRequest): Promise<TailoredResume> {
+  const skeleton =
+    request.current.experience.length > 0
+      ? request.current.experience.map((role) => ({
+          title: role.title,
+          company: role.company,
+          dates: role.dates,
+          bullets: role.bullets,
+        }))
+      : await extractExperienceSkeleton({
+          apiKey: request.apiKey,
+          model: request.model,
+          resumeText: request.resumeText,
+        });
+
+  const user = [
+    `JOB TITLE: ${request.job.title || 'Unknown'} at ${request.job.company || 'Unknown'}`,
+    '',
+    'INSTRUCTION FROM THE CANDIDATE:',
+    request.instruction.trim(),
+    '',
+    `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — keep company + dates exact):`,
+    JSON.stringify(
+      skeleton.map((role) => ({
+        title: role.title,
+        company: role.company,
+        dates: role.dates,
+      })),
+      null,
+      2,
+    ),
+    '',
+    'CURRENT TAILORED RESUME (JSON):',
+    JSON.stringify(
+      {
+        headline: request.current.headline,
+        summary: request.current.summary,
+        skillGroups: request.current.skillGroups,
+        experience: request.current.experience,
+        projects: request.current.projects,
+        education: request.current.education,
+        certifications: request.current.certifications,
+      },
+      null,
+      2,
+    ),
+    '',
+    'ORIGINAL RESUME (source of truth for facts):',
+    truncate(request.resumeText, 12000),
+  ].join('\n');
+
+  const raw = await chatJson<RawTailored>({
+    apiKey: request.apiKey,
+    model: request.model,
+    system: REFINE_PROMPT,
+    user,
+    temperature: 0.3,
+    maxTokens: 8000,
+  });
+
+  return buildTailored(raw, {
+    jobKey: request.current.jobKey,
+    originalText: request.resumeText,
+    targets: request.current.options.selectedKeywords,
+    options: request.current.options,
+    refinements: [...request.current.refinements, request.instruction.trim()],
+    experienceSkeleton: skeleton,
+  });
+}
+
+interface BuildContext {
+  jobKey: string;
+  originalText: string;
+  targets: string[];
+  options: TailorOptions;
+  refinements: string[];
+  experienceSkeleton: ExperienceEntry[];
+}
+
+function buildTailored(raw: RawTailored, context: BuildContext): TailoredResume {
+  const parsed = parseStructured(raw);
+  parsed.experience = reconcileExperience(context.experienceSkeleton, parsed.experience);
+  const structured = polishStructuredResume(parsed);
+  const text = renderResumeText(structured);
+  const { present, absent } = splitByPresence(text, context.targets);
+  const claimedReasons = readOmissionReasons(raw.omittedKeywords);
+
+  const changeNotes = toStringList(raw.changeNotes, 6);
+  if (hasWeakBullets(structured) && changeNotes.length < 6) {
+    changeNotes.push(
+      'Some bullets still read duty-focused—use Tweak with AI to rewrite them as accomplishments.',
+    );
+  }
+
+  return {
+    jobKey: context.jobKey,
+    ...structured,
+    changeNotes,
+    addedKeywords: present,
+    omittedKeywords: absent.map((keyword) => ({
+      keyword,
+      reason: claimedReasons.get(keyword.toLowerCase()) ?? 'Could not be supported by your resume.',
+    })),
+    options: context.options,
+    stats: computeStats(context.originalText, structured),
+    refinements: context.refinements,
+    text,
+    accepted: false,
+    createdAt: Date.now(),
+  };
+}
+
+export interface StructuredResume {
+  headline: string;
+  summary: string;
+  skillGroups: SkillGroup[];
+  skills: string[];
+  experience: ExperienceEntry[];
+  projects: ProjectEntry[];
+  education: EducationEntry[];
+  certifications: string[];
+  sections: ResumeSection[];
+}
+
+export function parseStructured(raw: RawTailored | TailoredResume): StructuredResume {
+  const skillGroups = toSkillGroups(raw.skillGroups, (raw as RawTailored).skills);
+  const experience = toExperience((raw as RawTailored).experience);
+  const projects = toProjects((raw as RawTailored).projects);
+  const education = toEducation((raw as RawTailored).education);
+  const certifications = toStringList((raw as RawTailored).certifications, 12).map(stripBulletPrefix);
+  const sections = toLegacySections((raw as RawTailored).sections);
+
+  // Older drafts only had free-form sections; promote them so the new renderer still works.
+  const promoted = promoteLegacySections(sections, {
+    experience,
+    projects,
+    education,
+    certifications,
+  });
+
+  return {
+    headline: typeof raw.headline === 'string' ? raw.headline.trim() : '',
+    summary: typeof raw.summary === 'string' ? raw.summary.trim() : '',
+    skillGroups,
+    skills: skillGroups.flatMap((group) => group.items),
+    experience: promoted.experience,
+    projects: promoted.projects,
+    education: promoted.education,
+    certifications: promoted.certifications,
+    sections: promoted.leftover,
+  };
+}
+
+function computeStats(originalText: string, resume: StructuredResume): TailorStats {
+  const original = normalizeForCompare(originalText);
+  let bulletsRewritten = 0;
+
+  for (const role of resume.experience) {
+    for (const bullet of role.bullets) {
+      if (!original.includes(normalizeForCompare(bullet))) bulletsRewritten += 1;
+    }
+  }
+  for (const project of resume.projects) {
+    for (const bullet of project.bullets) {
+      if (!original.includes(normalizeForCompare(bullet))) bulletsRewritten += 1;
+    }
+  }
+
+  return {
+    summaryUpdated: Boolean(resume.summary) && !original.includes(normalizeForCompare(resume.summary)),
+    bulletsRewritten,
+    skillsAdded: resume.skills.filter((skill) => !containsKeyword(originalText, skill)).length,
+  };
+}
+
+function normalizeForCompare(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function renderResumeText(resume: {
+  headline?: string;
+  summary: string;
+  skillGroups?: SkillGroup[];
+  skills?: string[];
+  experience?: ExperienceEntry[];
+  projects?: ProjectEntry[];
+  education?: EducationEntry[];
+  certifications?: string[];
+  sections?: ResumeSection[];
+}): string {
+  const parts: string[] = [];
+  if (resume.headline) parts.push(resume.headline, '');
+  if (resume.summary) parts.push('SUMMARY', resume.summary, '');
+
+  const groups = resume.skillGroups?.length
+    ? resume.skillGroups
+    : resume.skills?.length
+      ? [{ category: 'Skills', items: resume.skills }]
+      : [];
+  if (groups.length) {
+    parts.push('SKILLS');
+    for (const group of groups) {
+      parts.push(`${group.category}: ${group.items.join(', ')}`);
+    }
+    parts.push('');
+  }
+
+  if (resume.experience?.length) {
+    parts.push('EXPERIENCE');
+    for (const role of resume.experience) {
+      parts.push(`${role.title} | ${role.company}`);
+      if (role.dates) parts.push(role.dates);
+      for (const bullet of role.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
+      parts.push('');
+    }
+  }
+
+  if (resume.projects?.length) {
+    parts.push('PROJECTS');
+    for (const project of resume.projects) {
+      parts.push(project.name);
+      for (const bullet of project.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
+      parts.push('');
+    }
+  }
+
+  if (resume.education?.length) {
+    parts.push('EDUCATION');
+    for (const entry of resume.education) {
+      const schoolLine = [entry.school, entry.location].filter(Boolean).join(' — ');
+      if (schoolLine) parts.push(schoolLine);
+      const degreeLine = [entry.degree, entry.year].filter(Boolean).join(', ');
+      if (degreeLine) parts.push(degreeLine);
+      for (const detail of entry.details) parts.push(`- ${stripBulletPrefix(detail)}`);
+      parts.push('');
+    }
+  }
+
+  if (resume.certifications?.length) {
+    parts.push('CERTIFICATIONS', resume.certifications.map(stripBulletPrefix).join(' · '), '');
+  }
+
+  for (const section of resume.sections ?? []) {
+    parts.push(section.heading.toUpperCase());
+    for (const bullet of section.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
+    parts.push('');
+  }
+
+  return parts.join('\n').trim();
+}
+
+/** Strip markers the model often leaves on so the renderer does not double them. */
+export { stripBulletPrefix } from './resumeFormat';
+
+export function containsKeyword(text: string, keyword: string): boolean {
+  const term = keyword.trim();
+  if (!term) return false;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, 'i').test(text);
+}
+
+export function splitByPresence(text: string, keywords: string[]): { present: string[]; absent: string[] } {
+  const present: string[] = [];
+  const absent: string[] = [];
+  for (const keyword of keywords) {
+    (containsKeyword(text, keyword) ? present : absent).push(keyword);
+  }
+  return { present, absent };
+}
+
+function readOmissionReasons(value: unknown): Map<string, string> {
+  const reasons = new Map<string, string>();
+  if (!Array.isArray(value)) return reasons;
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as { keyword?: unknown; reason?: unknown };
+    if (typeof entry.keyword !== 'string') continue;
+    reasons.set(entry.keyword.trim().toLowerCase(), typeof entry.reason === 'string' ? entry.reason.trim() : '');
+  }
+  return reasons;
+}
+
+function toStringList(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => stripBulletPrefix(item))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function toSkillGroups(groups: unknown, flatSkills: unknown): SkillGroup[] {
+  if (Array.isArray(groups) && groups.length) {
+    const parsed: SkillGroup[] = [];
+    for (const item of groups) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as { category?: unknown; items?: unknown };
+      const category = typeof entry.category === 'string' ? entry.category.trim() : '';
+      const items = toStringList(entry.items, 12);
+      if (!category || !items.length) continue;
+      parsed.push({ category, items });
+    }
+    if (parsed.length) return parsed.slice(0, 8);
+  }
+
+  const flat = toStringList(flatSkills, 22);
+  return flat.length ? [{ category: 'Skills', items: flat }] : [];
+}
+
+function toExperience(value: unknown): ExperienceEntry[] {
+  if (!Array.isArray(value)) return [];
+  const roles: ExperienceEntry[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as {
+      title?: unknown;
+      company?: unknown;
+      dates?: unknown;
+      bullets?: unknown;
+    };
+    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    const company = typeof entry.company === 'string' ? entry.company.trim() : '';
+    const dates = typeof entry.dates === 'string' ? entry.dates.trim() : '';
+    const bullets = toStringList(entry.bullets, 12);
+    if (!title && !company && !bullets.length) continue;
+    roles.push({ title: title || 'Role', company, dates, bullets });
+  }
+  return roles;
+}
+
+/** Target bullet count label for prompts, and hard max for reconciliation. */
+export function bulletCapForRole(index: number): number {
+  if (index === 0) return 8;
+  if (index === 1) return 6;
+  return 4;
+}
+
+async function extractExperienceSkeleton(request: {
+  apiKey: string;
+  model: string;
+  resumeText: string;
+}): Promise<ExperienceEntry[]> {
+  try {
+    const raw = await chatJson<{ experience?: unknown }>({
+      apiKey: request.apiKey,
+      model: request.model,
+      system: EXTRACT_EXPERIENCE_PROMPT,
+      user: truncate(request.resumeText, 14000),
+      temperature: 0,
+      maxTokens: 3000,
+    });
+    return toExperience(raw.experience);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Force the tailored experience list to match the original skeleton:
+ * same count/order, locked company + dates, optional title/bullet updates.
+ */
+export function reconcileExperience(
+  skeleton: ExperienceEntry[],
+  tailored: ExperienceEntry[],
+): ExperienceEntry[] {
+  if (!skeleton.length) return tailored;
+
+  const unused = [...tailored];
+
+  return skeleton.map((original, index) => {
+    const byCompany = unused.findIndex(
+      (role) =>
+        normalizeCompany(role.company) === normalizeCompany(original.company) ||
+        (original.dates && role.dates === original.dates),
+    );
+    const matchIndex = byCompany >= 0 ? byCompany : unused.length ? 0 : -1;
+    const match = matchIndex >= 0 ? unused.splice(matchIndex, 1)[0] : undefined;
+
+    const cap = bulletCapForRole(index);
+    const rewritten = (match?.bullets ?? [])
+      .map(stripBulletPrefix)
+      .filter(Boolean)
+      .slice(0, cap);
+
+    // Prefer rewritten bullets; if the model returned nothing, keep the original ones (capped).
+    const bullets =
+      rewritten.length > 0
+        ? rewritten
+        : original.bullets.map(stripBulletPrefix).filter(Boolean).slice(0, cap);
+
+    return {
+      title: match?.title?.trim() || original.title,
+      company: original.company,
+      dates: original.dates,
+      bullets,
+    };
+  });
+}
+
+function normalizeCompany(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function toProjects(value: unknown): ProjectEntry[] {
+  if (!Array.isArray(value)) return [];
+  const projects: ProjectEntry[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as { name?: unknown; bullets?: unknown };
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const bullets = toStringList(entry.bullets, 3);
+    if (!name && !bullets.length) continue;
+    projects.push({ name: name || 'Project', bullets });
+  }
+  return projects.slice(0, 6);
+}
+
+function toEducation(value: unknown): EducationEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: EducationEntry[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as {
+      school?: unknown;
+      location?: unknown;
+      degree?: unknown;
+      year?: unknown;
+      details?: unknown;
+    };
+    const school = typeof entry.school === 'string' ? entry.school.trim() : '';
+    const location = typeof entry.location === 'string' ? entry.location.trim() : '';
+    const degree = typeof entry.degree === 'string' ? entry.degree.trim() : '';
+    const year = typeof entry.year === 'string' ? entry.year.trim() : '';
+    const details = toStringList(entry.details, 3);
+    if (!school && !degree) continue;
+    entries.push({ school, location, degree, year, details });
+  }
+  return entries.slice(0, 4);
+}
+
+function toLegacySections(value: unknown): ResumeSection[] {
+  if (!Array.isArray(value)) return [];
+  const sections: ResumeSection[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as { heading?: unknown; bullets?: unknown };
+    const heading = typeof candidate.heading === 'string' ? candidate.heading.trim() : '';
+    const bullets = toStringList(candidate.bullets, 12);
+    if (!heading && !bullets.length) continue;
+    sections.push({ heading: heading || 'Section', bullets });
+  }
+  return sections;
+}
+
+function promoteLegacySections(
+  sections: ResumeSection[],
+  current: {
+    experience: ExperienceEntry[];
+    projects: ProjectEntry[];
+    education: EducationEntry[];
+    certifications: string[];
+  },
+): {
+  experience: ExperienceEntry[];
+  projects: ProjectEntry[];
+  education: EducationEntry[];
+  certifications: string[];
+  leftover: ResumeSection[];
+} {
+  if (!sections.length) {
+    return { ...current, leftover: [] };
+  }
+
+  const experience = [...current.experience];
+  const projects = [...current.projects];
+  const education = [...current.education];
+  let certifications = [...current.certifications];
+  const leftover: ResumeSection[] = [];
+
+  for (const section of sections) {
+    const heading = section.heading.toLowerCase();
+    if (!experience.length && /experience|engineer|developer|intern/.test(heading)) {
+      const parsed = parseRoleHeading(section.heading);
+      experience.push({
+        title: parsed.title,
+        company: parsed.company,
+        dates: parsed.dates,
+        bullets: section.bullets.slice(0, 8),
+      });
+      continue;
+    }
+    if (!projects.length && /project/.test(heading)) {
+      projects.push({ name: section.heading, bullets: section.bullets.slice(0, 3) });
+      continue;
+    }
+    if (!education.length && /education|university|college|school/.test(heading)) {
+      education.push({
+        school: section.heading,
+        location: '',
+        degree: section.bullets[0] ?? '',
+        year: '',
+        details: section.bullets.slice(1, 3),
+      });
+      continue;
+    }
+    if (!certifications.length && /certif/.test(heading)) {
+      certifications = section.bullets;
+      continue;
+    }
+    leftover.push(section);
+  }
+
+  return { experience, projects, education, certifications, leftover };
+}
