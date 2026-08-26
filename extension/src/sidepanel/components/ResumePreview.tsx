@@ -1,5 +1,8 @@
+import { Fragment } from 'react';
+import type { DiffPart } from '../../lib/diffText';
 import { splitMetricParts } from '../../lib/resumeBuildRules';
 import { stripBulletPrefix } from '../../lib/resumeFormat';
+import type { ResumeDiff } from '../../lib/resumeDiff';
 import type {
   EducationEntry,
   ExperienceEntry,
@@ -26,9 +29,13 @@ interface Props {
   template: ResumeTemplate;
   /** Terms to visually mark as inserted by the rewrite. */
   highlights: string[];
+  /** When set, render as a comparison against the original resume instead. */
+  diff?: ResumeDiff;
 }
 
-export function ResumePreview({ profile, resume, template, highlights }: Props) {
+export function ResumePreview({ profile, resume, template, highlights, diff }: Props) {
+  /** In comparison mode the diff colours carry the meaning, so drop the other marks. */
+  const line = (text: string) => (diff ? renderDiff(text, diff) : formatLine(text, highlights));
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const contact = [
     profile.email,
@@ -50,14 +57,14 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
     <div className={`paper tpl-${template}`}>
       <header className="paper-header">
         <div className="paper-name">{fullName || 'Your name'}</div>
-        {resume.headline && <div className="paper-headline">{resume.headline}</div>}
+        {resume.headline && <div className="paper-headline">{line(resume.headline)}</div>}
         {contact.length > 0 && <div className="paper-contact">{contact.join('  ·  ')}</div>}
       </header>
 
       {resume.summary && (
         <section>
           <h4>Summary</h4>
-          <p>{formatLine(resume.summary, highlights)}</p>
+          <p>{line(resume.summary)}</p>
         </section>
       )}
 
@@ -68,7 +75,16 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
             {skillGroups.map((group) => (
               <div className="skill-row" key={group.category}>
                 <strong>{group.category}:</strong>{' '}
-                <span>{formatLine(group.items.join(', '), highlights)}</span>
+                <span>
+                  {diff
+                    ? group.items.map((item, index) => (
+                        <Fragment key={item}>
+                          {index > 0 && ', '}
+                          {diff.addedSkills.has(item.toLowerCase()) ? <ins>{item}</ins> : item}
+                        </Fragment>
+                      ))
+                    : formatLine(group.items.join(', '), highlights)}
+                </span>
               </div>
             ))}
           </div>
@@ -87,9 +103,10 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
               <ul>
                 {role.bullets.map((bullet, bulletIndex) => (
                   <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
-                    {formatLine(stripBulletPrefix(bullet), highlights)}
+                    {line(stripBulletPrefix(bullet))}
                   </li>
                 ))}
+                {droppedItems(diff, index)}
               </ul>
             </div>
           ))}
@@ -105,7 +122,7 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
               <ul>
                 {project.bullets.slice(0, 3).map((bullet, bulletIndex) => (
                   <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
-                    {formatLine(stripBulletPrefix(bullet), highlights)}
+                    {line(stripBulletPrefix(bullet))}
                   </li>
                 ))}
               </ul>
@@ -146,6 +163,19 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
         </section>
       )}
 
+      {diff && diff.droppedOther.length > 0 && (
+        <section className="dropped-section">
+          <h4>Left out of the rewrite</h4>
+          <ul>
+            {diff.droppedOther.map((text, index) => (
+              <li className="dropped" key={`other-${index}`}>
+                <del>{text}</del>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {resume.sections?.map((section, index) => (
         <section key={`${section.heading}-${index}`}>
           <h4>{section.heading}</h4>
@@ -160,6 +190,40 @@ export function ResumePreview({ profile, resume, template, highlights }: Props) 
       ))}
     </div>
   );
+}
+
+/** Renders one line as a comparison: green for new wording, struck for what it replaced. */
+function renderDiff(text: string, diff: ResumeDiff): JSX.Element {
+  if (diff.additions.has(text)) return <ins>{text}</ins>;
+
+  const parts = diff.lines.get(text);
+  if (!parts) return <>{text}</>;
+
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={`${part.kind}-${index}`}>
+          {index > 0 && ' '}
+          {renderPart(part)}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function renderPart(part: DiffPart): JSX.Element | string {
+  if (part.kind === 'added') return <ins>{part.text}</ins>;
+  if (part.kind === 'removed') return <del>{part.text}</del>;
+  return part.text;
+}
+
+/** The lines an original role lost, shown struck through under the bullets that stayed. */
+function droppedItems(diff: ResumeDiff | undefined, roleIndex: number): JSX.Element[] {
+  return (diff?.droppedByRole.get(roleIndex) ?? []).map((text, index) => (
+    <li className="dropped" key={`dropped-${index}`}>
+      <del>{text}</del>
+    </li>
+  ));
 }
 
 function formatLine(text: string, keywords: string[]): (string | JSX.Element)[] {

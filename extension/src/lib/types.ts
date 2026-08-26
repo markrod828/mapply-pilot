@@ -185,6 +185,11 @@ export interface Settings {
   tailorModel: string;
   autoScore: boolean;
   resumeTemplate: ResumeTemplate;
+  /**
+   * Name of the folder picked for saved resumes, for display only - the handle that
+   * grants access lives in IndexedDB. Empty means save to the Downloads folder.
+   */
+  saveDirectoryName: string;
 }
 
 export interface JobRecord {
@@ -202,6 +207,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tailorModel: 'gpt-4o',
   autoScore: true,
   resumeTemplate: 'classic',
+  saveDirectoryName: '',
 };
 
 export const EMPTY_PROFILE: Profile = {

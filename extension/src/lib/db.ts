@@ -45,6 +45,19 @@ export function deleteFile(key: string): Promise<undefined> {
   return withStore<undefined>('readwrite', (store) => store.delete(key));
 }
 
+/** Same store, for values that are not files - e.g. a picked directory handle. */
+export function putRecord<T>(key: string, value: T): Promise<IDBValidKey> {
+  return withStore('readwrite', (store) => store.put(value, key));
+}
+
+export function getRecord<T>(key: string): Promise<T | undefined> {
+  return withStore<T | undefined>('readonly', (store) => store.get(key));
+}
+
+export function deleteRecord(key: string): Promise<undefined> {
+  return withStore<undefined>('readwrite', (store) => store.delete(key));
+}
+
 export const DEFAULT_RESUME_FILE = 'default-resume';
 export const tailoredResumeFile = (jobKey: string) => `tailored:${jobKey}`;
 

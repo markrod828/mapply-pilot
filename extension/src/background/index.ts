@@ -13,6 +13,7 @@ import {
   setActiveJobKey,
   updateJob,
 } from '../lib/storage';
+import { resumeFileName } from '../lib/resumePdf';
 import { refineResume, tailorResume } from '../lib/tailor';
 import type { AtsScore, JobPosting, JobRecord, TailorOptions } from '../lib/types';
 
@@ -237,32 +238,45 @@ async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; pa
   const profile = await getProfile();
   const resume = await getResume();
   const record = await getActiveJob();
-  const tailored = record?.tailored?.accepted ? record.tailored : undefined;
+  // Not gated on `accepted`: every tailor and refine resets that flag, and the draft
+  // on screen is the one the user means to send. The side panel keeps its PDF current.
+  const tailored = record?.tailored;
 
   let fileBlob: Blob | undefined;
   let fileName = resume?.fileName ?? 'resume.pdf';
   let fileMime = resume?.mimeType ?? 'application/pdf';
+  let tailoredUnavailable = false;
 
   if (tailored) {
     fileBlob = await getFile(tailoredResumeFile(tailored.jobKey));
     if (fileBlob) {
-      fileName = `${(profile.firstName + profile.lastName).replace(/[^a-z0-9]/gi, '') || 'Tailored'}-Resume.pdf`;
+      fileName = resumeFileName(profile, record?.job.company ?? '');
       fileMime = 'application/pdf';
+    } else {
+      tailoredUnavailable = true;
     }
   }
   if (!fileBlob) {
     fileBlob = await getFile(DEFAULT_RESUME_FILE);
   }
 
+  const usingTailored = Boolean(tailored) && !tailoredUnavailable;
+
   return {
     ok: true,
     payload: {
       profile,
-      resumeText: tailored?.text ?? resume?.text ?? '',
+      // Kept in step with the attached file, so a form never gets tailored text
+      // pasted next to the original PDF.
+      resumeText: (usingTailored ? tailored?.text : resume?.text) ?? '',
       resumeFileName: fileName,
       resumeFileBase64: fileBlob ? await blobToBase64(fileBlob) : '',
       resumeFileMime: fileMime,
-      usingTailored: Boolean(tailored),
+      usingTailored,
+      resumeLabel: usingTailored
+        ? `tailored resume for ${record?.job.title || 'this job'}`
+        : `your default resume${resume?.fileName ? ` (${resume.fileName})` : ''}`,
+      tailoredUnavailable,
     },
   };
 }

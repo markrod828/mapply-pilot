@@ -549,6 +549,55 @@ label.check input {
   padding: 0 2px;
 }
 
+.paper ins {
+  background: #bbf7d0;
+  color: #14532d;
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.paper del {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* A bullet the rewrite dropped entirely, listed under the ones it kept. */
+.paper li.dropped {
+  list-style-type: none;
+  margin-left: -14px;
+}
+
+.paper .dropped-section h4 {
+  color: #991b1b;
+}
+
+.diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.diff-legend ins {
+  background: #bbf7d0;
+  color: #14532d;
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.diff-legend del {
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
 .paper-name {
   font-weight: 700;
 }

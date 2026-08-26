@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TEMPLATES } from '../../lib/resumePdf';
+import { chooseSaveDirectory, clearSaveDirectory, supportsFolderPicker } from '../../lib/saveLocation';
 import { setSettings } from '../../lib/storage';
 import type { ResumeTemplate, Settings } from '../../lib/types';
 import { useAction } from '../hooks';
@@ -19,6 +20,28 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
     setDraft((current) => ({ ...current, ...patch }));
     setSaved(false);
   };
+
+  /**
+   * The folder grant lands in IndexedDB the moment it is given, so its name has to
+   * persist with it rather than waiting for "Save settings" and drifting apart.
+   */
+  const applyDirectory = async (name: string) => {
+    const next = { ...draft, saveDirectoryName: name };
+    setDraft(next);
+    await setSettings(next);
+  };
+
+  const pickFolder = () =>
+    void run('folder', async () => {
+      const name = await chooseSaveDirectory();
+      if (name !== null) await applyDirectory(name);
+    });
+
+  const useDownloads = () =>
+    void run('folder', async () => {
+      await clearSaveDirectory();
+      await applyDirectory('');
+    });
 
   return (
     <div className="stack">
@@ -99,6 +122,39 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="card stack">
+        <h2>Where saved resumes go</h2>
+        <p className="small muted" style={{ margin: 0 }}>
+          Each PDF is filed as <strong>resumes / company / job title / your name.pdf</strong>.
+        </p>
+        <div className="notice">
+          {draft.saveDirectoryName
+            ? `${draft.saveDirectoryName} / resumes / …`
+            : 'Downloads / resumes / …'}
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          On its own an extension can only write inside your Downloads folder. Pick a folder —
+          Documents, for instance — to let ApplyPilot file resumes there instead. Chrome remembers
+          the choice and may ask you to confirm it again after a restart.
+        </p>
+        {supportsFolderPicker() ? (
+          <div className="row wrap">
+            <button className="secondary" disabled={pending !== null} onClick={pickFolder}>
+              {pending === 'folder' ? 'Waiting…' : 'Choose folder…'}
+            </button>
+            {draft.saveDirectoryName && (
+              <button className="ghost" disabled={pending !== null} onClick={useDownloads}>
+                Use Downloads instead
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="small muted" style={{ margin: 0 }}>
+            This Chrome build cannot pick a folder, so resumes go to your Downloads folder.
+          </p>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}

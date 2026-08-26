@@ -93,8 +93,14 @@ export async function autofillNow(): Promise<AutofillResult> {
 function renderResult(result: AutofillResult): string {
   const lines = [
     `<strong>${result.filled.length}</strong> field(s) filled via ${escapeHtml(result.adapter)}.`,
-    result.resumeAttached ? 'Resume attached.' : 'No resume upload field found.',
+    result.resumeAttached
+      ? `Attached ${escapeHtml(result.resumeLabel)}.`
+      : 'No resume upload field found.',
   ];
+
+  if (result.resumeWarning) {
+    lines.push(`<span class="warn">${escapeHtml(result.resumeWarning)}</span>`);
+  }
 
   if (result.skipped.length) {
     const items = result.skipped

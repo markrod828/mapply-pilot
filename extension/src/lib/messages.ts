@@ -8,6 +8,10 @@ export interface AutofillPayload {
   resumeFileBase64: string;
   resumeFileMime: string;
   usingTailored: boolean;
+  /** Human-readable description of the file being attached, shown in the page panel. */
+  resumeLabel: string;
+  /** A tailored draft exists for this job but has no stored PDF, so the default went up. */
+  tailoredUnavailable: boolean;
 }
 
 export type Message =

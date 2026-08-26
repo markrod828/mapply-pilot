@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { putFile, tailoredResumeFile } from '../../lib/db';
-import { downloadBlob } from '../../lib/download';
 import { sendMessage } from '../../lib/messages';
-import { TEMPLATES, buildResumePdf, resumeFileName } from '../../lib/resumePdf';
+import { buildResumeDiff } from '../../lib/resumeDiff';
+import { TEMPLATES, buildResumePdf } from '../../lib/resumePdf';
+import { saveResumePdf } from '../../lib/saveLocation';
 import { setSettings, updateJob } from '../../lib/storage';
+import { storeTailoredPdf } from '../../lib/tailoredFile';
 import { containsKeyword, renderResumeText } from '../../lib/tailor';
 import type { JobRecord, Profile, ResumeTemplate, Settings, TailoredResume } from '../../lib/types';
 import { ResumePreview } from './ResumePreview';
 import { ScoreGauge } from './ScoreGauge';
+
+/** Debounce so typing in the editor does not rebuild the PDF on every keystroke. */
+const PDF_SYNC_DELAY_MS = 600;
 
 const QUICK_INSTRUCTIONS = [
   'Rewrite duty-style bullets as accomplishments with truthful metrics from my original resume',
@@ -18,26 +22,54 @@ const QUICK_INSTRUCTIONS = [
   'Trim each project to 2-3 impactful bullets',
 ];
 
+type Mode = 'preview' | 'changes' | 'edit';
+
+const MODES: { id: Mode; label: string }[] = [
+  { id: 'preview', label: 'Preview' },
+  { id: 'changes', label: 'Changes' },
+  { id: 'edit', label: 'Edit' },
+];
+
 interface Props {
   record: JobRecord;
   profile: Profile;
   settings: Settings;
+  /** Your default resume text, compared against the draft in "Changes" mode. */
+  originalText: string;
   pending: string | null;
   run: (name: string, action: () => Promise<void>) => Promise<void>;
   onBack: () => void;
 }
 
-export function ReviewStep({ record, profile, settings, pending, run, onBack }: Props) {
+export function ReviewStep({ record, profile, settings, originalText, pending, run, onBack }: Props) {
   const tailored = record.tailored;
   const [draft, setDraft] = useState<TailoredResume | null>(tailored ?? null);
-  const [mode, setMode] = useState<'preview' | 'edit'>('preview');
+  const [mode, setMode] = useState<Mode>('preview');
   const [instruction, setInstruction] = useState('');
+  const [savedTo, setSavedTo] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(tailored ?? null);
   }, [tailored?.createdAt, tailored?.jobKey]);
 
   const draftText = useMemo(() => (draft ? renderResumeText(draft) : ''), [draft]);
+
+  const comparison = useMemo(
+    () => (draft && originalText ? buildResumeDiff(originalText, draft, draftText) : undefined),
+    [draft, draftText, originalText],
+  );
+
+  // Autofill attaches whatever PDF is stored for this job, so keep that file in step
+  // with the draft on screen - including edits that were never accepted.
+  useEffect(() => {
+    if (!draft) return undefined;
+    const timer = window.setTimeout(() => {
+      void storeTailoredPdf(record.job.jobKey, profile, draft, settings.resumeTemplate).catch(() => {
+        // Autofill reports the fallback to the default resume, so stay quiet here.
+      });
+    }, PDF_SYNC_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, draftText, profile, record.job.jobKey, settings.resumeTemplate]);
 
   if (!draft) return null;
 
@@ -49,8 +81,7 @@ export function ReviewStep({ record, profile, settings, pending, run, onBack }: 
 
   const acceptDraft = async () => {
     const accepted: TailoredResume = { ...draft, text: draftText, accepted: true };
-    const pdf = await buildResumePdf(profile, accepted, template);
-    await putFile(tailoredResumeFile(record.job.jobKey), pdf);
+    await storeTailoredPdf(record.job.jobKey, profile, accepted, template);
     await updateJob(record.job.jobKey, (current) => ({
       ...current,
       tailored: accepted,
@@ -65,7 +96,8 @@ export function ReviewStep({ record, profile, settings, pending, run, onBack }: 
 
   const downloadPdf = async () => {
     const pdf = await buildResumePdf(profile, { ...draft, text: draftText }, template);
-    await downloadBlob(pdf, resumeFileName(profile, record.job.company));
+    const saved = await saveResumePdf(pdf, profile, record.job);
+    setSavedTo(saved.location);
   };
 
   const refine = async (text: string) => {
@@ -163,42 +195,56 @@ export function ReviewStep({ record, profile, settings, pending, run, onBack }: 
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>Your new resume</h2>
           <div className="row" style={{ gap: 2 }}>
-            <button
-              className={mode === 'preview' ? 'secondary' : 'ghost'}
-              onClick={() => setMode('preview')}
-            >
-              Preview
-            </button>
-            <button className={mode === 'edit' ? 'secondary' : 'ghost'} onClick={() => setMode('edit')}>
-              Edit
-            </button>
+            {MODES.map((item) => (
+              <button
+                key={item.id}
+                className={mode === item.id ? 'secondary' : 'ghost'}
+                onClick={() => setMode(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {mode === 'preview' ? (
+        {mode !== 'edit' ? (
           <>
-            <div className="template-picker">
-              {(Object.keys(TEMPLATES) as ResumeTemplate[]).map((key) => (
-                <button
-                  type="button"
-                  key={key}
-                  className={`template-option ${template === key ? 'selected' : ''}`}
-                  onClick={() => void selectTemplate(key)}
-                >
-                  <strong>{TEMPLATES[key].label}</strong>
-                  <span>{TEMPLATES[key].description}</span>
-                </button>
-              ))}
-            </div>
+            {mode === 'preview' && (
+              <div className="template-picker">
+                {(Object.keys(TEMPLATES) as ResumeTemplate[]).map((key) => (
+                  <button
+                    type="button"
+                    key={key}
+                    className={`template-option ${template === key ? 'selected' : ''}`}
+                    onClick={() => void selectTemplate(key)}
+                  >
+                    <strong>{TEMPLATES[key].label}</strong>
+                    <span>{TEMPLATES[key].description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {mode === 'changes' && (
+              <div className="diff-legend">
+                <span>
+                  <ins>green</ins> new or rewritten wording
+                </span>
+                <span>
+                  <del>struck</del> wording from your original
+                </span>
+              </div>
+            )}
             <ResumePreview
               profile={profile}
               resume={draft}
               template={template}
-              highlights={highlights}
+              highlights={mode === 'changes' ? [] : highlights}
+              diff={mode === 'changes' ? comparison : undefined}
             />
             <p className="small muted" style={{ margin: 0 }}>
-              Both templates are single-column with no tables or graphics, so parsers still read them
-              in order. The PDF you download or autofill matches this preview.
+              {mode === 'changes'
+                ? 'Each line is matched to the closest line in your original resume, so unchanged text stays plain. Lines with no match are shown as new.'
+                : 'Both templates are single-column with no tables or graphics, so parsers still read them in order. The PDF you download or autofill matches this preview.'}
             </p>
           </>
         ) : (
@@ -416,9 +462,14 @@ export function ReviewStep({ record, profile, settings, pending, run, onBack }: 
             {pending === 'accept' ? 'Scoring…' : 'Accept & re-score'}
           </button>
           <button className="secondary" disabled={busy} onClick={() => void run('download', downloadPdf)}>
-            {pending === 'download' ? 'Building…' : 'Download PDF'}
+            {pending === 'download' ? 'Saving…' : 'Save PDF'}
           </button>
         </div>
+        {savedTo && (
+          <p className="small muted" style={{ margin: 0 }}>
+            Saved to <strong>{savedTo}</strong>
+          </p>
+        )}
       </div>
 
       <div className="card stack">

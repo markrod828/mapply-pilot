@@ -44,8 +44,12 @@ In the side panel:
   for tailoring. Leave "score automatically" on to score every job you open.
 - **Resume** — upload your default resume PDF. The text is extracted locally; correct any extraction
   glitches in the text box, since that text is what gets scored and tailored. The original PDF stays
-  on your machine and is attached by autofill when you have not tailored a version.
+  on your machine and is attached by autofill only when you have not tailored a version for the job
+  you are applying to.
 - **Profile** — contact details, links, work authorization and reusable screening answers.
+- **Settings → Where saved resumes go** — optional. By default a saved PDF lands in
+  `Downloads/resumes/{company}/{job title}/{your name}.pdf`. Pick a folder (Documents, say) to file
+  them there instead; see [Where resumes are saved](#where-resumes-are-saved).
 
 ## Daily use
 
@@ -58,10 +62,13 @@ In the side panel:
      experience, industry, education) plus the ATS keyword list showing matched vs missing.
    - **Align your resume** — pick which sections to enhance (summary, skills, work experience with
      quick or full depth, projects) and tick the missing keywords to add. Add your own keywords too.
-   - **Review your new resume** — before/after score, what changed, a formatted preview with the
-     inserted keywords highlighted, a template switcher, an editor, and a "tweak with AI" box for
-     follow-up instructions.
-   Then **Accept & re-score** to store an ATS-friendly PDF and lock it in for autofill.
+   - **Review your new resume** — before/after score, what changed, and three views of the draft:
+     **Preview** (formatted, with inserted keywords highlighted, plus the template switcher),
+     **Changes** (a line-by-line comparison against your original) and **Edit**. There is also a
+     "tweak with AI" box for follow-up instructions.
+   Then **Accept & re-score** to see what the rewrite did to your score. Autofill already
+   attaches the draft you are looking at, edits included — accepting is about the score, not
+   about making the resume uploadable.
 4. Open the application form. On Greenhouse, Lever, Ashby and Rippling a small **Autofill this
    application** panel appears once the form itself is on the page. On any other site, use
    **Autofill this page** in the side panel and allow the one-time Chrome permission prompt for
@@ -85,11 +92,18 @@ extension/
         detect.ts           waits for a real application form before offering to fill
     lib/                    types, storage, OpenAI client, ATS rubric, tailor prompt, PDF in/out
       hosts.ts              per-site permission checks and prompts
+      diffText.ts           word-level LCS diff
+      resumeDiff.ts         pairs each rewritten line with the original it came from
+      savePath.ts           resumes/{company}/{job title}/{name}.pdf, sanitised
+      saveLocation.ts       chosen-folder writes, falling back to Downloads
     sidepanel/              React UI (Job, Resume, Profile, Settings tabs)
 ```
 
 - Job data comes from the page you are already viewing (JSON-LD `JobPosting` when present, otherwise
   the largest description-like block). No private Jobright APIs are called.
+- Applying usually redirects to the company's own form on another site. The tailored resume follows:
+  autofill attaches the draft stored for whichever job is currently open in the panel, and the panel
+  rewrites that PDF whenever the draft changes, so the file on the form matches what you last saw.
 - Scores are cached per job and per resume version, so reopening a job is instant and editing your
   resume invalidates stale scores.
 - Scoring is calibrated to bands rather than left open-ended, so it does not drift optimistic, and
@@ -105,9 +119,38 @@ extension/
   reflects what was actually written rather than what the model claimed.
 - "What changed" counts are computed by diffing the draft against your original resume, not taken
   from the model's self-report.
+- The **Changes** view compares the draft with your original resume in code, not by asking the model
+  what it did. Your original is plain text with no sections, so each new bullet is paired with the
+  line it most resembles and diffed word by word: new wording is green, wording it replaced is
+  struck through, and untouched text stays plain. Bullets with no counterpart show as entirely new,
+  and original bullets that survive nowhere are listed under the role they came from — a line that
+  merely moved (a role heading, your skills list, an education entry) is not reported as a cut.
 - The prompt forbids inventing employers, titles, dates, degrees or metrics, and sections you did
   not select are reproduced verbatim. Keywords you tick are treated as true. Read the draft before
   you accept it — you are responsible for every claim on your resume.
+
+## Where resumes are saved
+
+**Save PDF** files the resume as:
+
+```
+resumes/{company}/{job title}/{your full name}.pdf
+```
+
+Illegal path characters are stripped from the company and title, long names are shortened, and
+empty ones become `Unknown company` / `Unknown role`. Saving the same job twice overwrites that
+file rather than piling up copies.
+
+By default this tree sits in your **Downloads** folder, because that is the only place a Chrome
+extension can write on its own — the downloads API rejects absolute paths and `..`, so
+`Documents/...` is out of reach through it.
+
+To keep resumes somewhere else, open **Settings → Where saved resumes go** and choose a folder. The
+picker opens at Documents, and choosing it gives you exactly
+`Documents/resumes/{company}/{job title}/{your name}.pdf`. Chrome remembers the grant, though it may
+ask you to confirm again after a restart; if the folder is unavailable, saving quietly falls back to
+Downloads and the panel tells you where the file went. Folder picking needs a Chrome build that
+supports the File System Access API — without it, saving always uses Downloads.
 
 ## Resume templates
 

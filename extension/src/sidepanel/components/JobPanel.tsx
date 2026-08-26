@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { requestHostAccess } from '../../lib/hosts';
 import { sendMessage } from '../../lib/messages';
+import { storeTailoredPdf } from '../../lib/tailoredFile';
 import {
   DEFAULT_TAILOR_OPTIONS,
   type JobRecord,
@@ -111,6 +112,11 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
       // Has to happen here, in the click handler: Chrome only shows the optional
       // host-permission prompt during a user gesture, so the worker cannot ask.
       await requestHostAccess(tab.url);
+      // The review step may never have been opened this session, so make sure the
+      // stored PDF is this draft before the worker reads it.
+      if (tailored) {
+        await storeTailoredPdf(record.job.jobKey, profile, tailored, settings.resumeTemplate);
+      }
       const response = await sendMessage<{ ok: boolean; error?: string }>({
         type: 'RUN_AUTOFILL',
         tabId: tab.id,
@@ -137,6 +143,11 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
             {pending === 'autofill' ? 'Filling…' : 'Autofill this page'}
           </button>
         </div>
+        <div className="small muted">
+          {tailored
+            ? 'Autofill attaches your tailored resume for this job, including edits you have not accepted.'
+            : 'Autofill attaches your default resume. Tailor one for this job to send the improved version.'}
+        </div>
       </div>
 
       <Stepper current={step} reachable={reachable} onSelect={setStep} />
@@ -162,6 +173,7 @@ export function JobPanel({ record, profile, resume, settings, onGoToSettings, on
           record={record}
           profile={profile}
           settings={settings}
+          originalText={resume.text}
           pending={pending}
           run={run}
           onBack={() => setStep('align')}

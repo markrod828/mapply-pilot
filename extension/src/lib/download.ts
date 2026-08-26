@@ -7,12 +7,21 @@
 /** Generous: with "ask where to save" on, a download sits in progress until the user picks. */
 const SETTLE_TIMEOUT_MS = 10 * 60 * 1000;
 
-export async function downloadBlob(blob: Blob, filename: string): Promise<void> {
+/**
+ * `filename` may include subfolders (`resumes/Acme/Engineer/Name.pdf`); Chrome creates
+ * them under the download folder. It cannot escape that folder - absolute paths and
+ * `..` are rejected - so writing elsewhere is `saveLocation`'s job.
+ */
+export async function downloadBlob(
+  blob: Blob,
+  filename: string,
+  conflictAction: chrome.downloads.FilenameConflictAction = 'uniquify',
+): Promise<void> {
   const url = URL.createObjectURL(blob);
 
   let downloadId: number;
   try {
-    downloadId = await chrome.downloads.download({ url, filename });
+    downloadId = await chrome.downloads.download({ url, filename, conflictAction });
   } catch (error) {
     URL.revokeObjectURL(url);
     throw error;

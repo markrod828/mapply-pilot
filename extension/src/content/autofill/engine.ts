@@ -17,6 +17,10 @@ export interface AutofillResult {
   filled: string[];
   skipped: string[];
   resumeAttached: boolean;
+  /** Which resume went up, e.g. "tailored resume for Platform Engineer". */
+  resumeLabel: string;
+  /** Set when the tailored draft could not be attached and the default went up instead. */
+  resumeWarning?: string;
   adapter: string;
 }
 
@@ -27,6 +31,10 @@ export function runAutofill(payload: AutofillPayload): AutofillResult {
     filled: [],
     skipped: [],
     resumeAttached: false,
+    resumeLabel: payload.resumeLabel,
+    resumeWarning: payload.tailoredUnavailable
+      ? 'Your tailored resume has no saved PDF yet, so the default went up. Open ApplyPilot on this job, then autofill again.'
+      : undefined,
     adapter: findAdapter(location.hostname)?.name ?? 'Generic',
   };
 
