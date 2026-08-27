@@ -26,7 +26,7 @@ const RULES = `Hard rules:
 - EXPERIENCE IS LOCKED FOR COUNT, COMPANY AND DATES:
   - Keep every work experience from the original resume. Same number of roles, same order
     (most recent first).
-  - Copy company and start-end dates EXACTLY from the LOCKED EXPERIENCE SKELETON. Do not merge,
+  - Copy company, location and start-end dates EXACTLY from the LOCKED EXPERIENCE SKELETON. Do not merge,
     drop, rename, invent or reorder employers, and do not change date ranges.
   - You MAY update the role title (positioning toward the target job) and rewrite bullet content.
 - Reproduce education and certifications fully - never drop them. A missing degree looks like a gap.
@@ -74,8 +74,8 @@ Respond ONLY with JSON of the shape:
   "headline": string,
   "summary": string,
   "skillGroups": [{ "category": string, "items": string[] }],
-  "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }],
-  "projects": [{ "name": string, "bullets": string[] }],
+  "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }],
+  "projects": [{ "name": string, "tech": string, "bullets": string[] }],
   "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
   "certifications": string[],
   "addedKeywords": string[],
@@ -83,7 +83,7 @@ Respond ONLY with JSON of the shape:
   "changeNotes": string[]
 }
 The experience array MUST have the same length and order as the LOCKED EXPERIENCE SKELETON, with
-identical company and dates fields. summary is 2-3 sentences that open with the target role and real
+identical company, location and dates fields. summary is 2-3 sentences that open with the target role and real
 years of experience, and stay consistent with the headline stack. Every target keyword must appear
 in either addedKeywords or omittedKeywords. changeNotes lists at most 6 short notes on what you
 changed.`;
@@ -104,21 +104,22 @@ Respond ONLY with JSON of the same shape you were given:
   "headline": string,
   "summary": string,
   "skillGroups": [{ "category": string, "items": string[] }],
-  "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }],
-  "projects": [{ "name": string, "bullets": string[] }],
+  "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }],
+  "projects": [{ "name": string, "tech": string, "bullets": string[] }],
   "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
   "certifications": string[],
   "addedKeywords": string[],
   "omittedKeywords": [{ "keyword": string, "reason": string }],
   "changeNotes": string[]
 }
-Preserve every experience entry with the same company and dates. changeNotes should describe only
+Preserve every experience entry with the same company, location and dates. changeNotes should describe only
 what this instruction changed.`;
 
 const EXTRACT_EXPERIENCE_PROMPT = `Extract every paid work experience from this resume, most recent first.
-Do not invent roles. Copy company names and date ranges exactly as written.
+Do not invent roles. Copy company names, locations and date ranges exactly as written.
+location is the city/state the role was based in, or "" when the resume does not say.
 Respond ONLY with JSON:
-{ "experience": [{ "title": string, "company": string, "dates": string, "bullets": string[] }] }
+{ "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }] }
 Include the original bullets (without leading bullet markers). If a field is missing, use "".`;
 
 interface RawTailored {
@@ -168,12 +169,13 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
   const lockedSkeleton = skeleton.length
     ? [
         '',
-        `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — copy company + dates exactly; keep this count and order):`,
+        `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — copy company + location + dates exactly; keep this count and order):`,
         JSON.stringify(
           skeleton.map((role, index) => ({
             index: index + 1,
             title: role.title,
             company: role.company,
+            location: role.location ?? '',
             dates: role.dates,
             originalBulletCount: role.bullets.length,
             targetBulletRange:
@@ -242,6 +244,7 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
       ? request.current.experience.map((role) => ({
           title: role.title,
           company: role.company,
+          location: role.location ?? '',
           dates: role.dates,
           bullets: role.bullets,
         }))
@@ -257,11 +260,12 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
     'INSTRUCTION FROM THE CANDIDATE:',
     request.instruction.trim(),
     '',
-    `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — keep company + dates exact):`,
+    `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — keep company + location + dates exact):`,
     JSON.stringify(
       skeleton.map((role) => ({
         title: role.title,
         company: role.company,
+        location: role.location ?? '',
         dates: role.dates,
       })),
       null,
@@ -430,24 +434,28 @@ export function renderResumeText(resume: {
   if (resume.headline) parts.push(resume.headline, '');
   if (resume.summary) parts.push('SUMMARY', resume.summary, '');
 
-  const groups = resume.skillGroups?.length
-    ? resume.skillGroups
-    : resume.skills?.length
-      ? [{ category: 'Skills', items: resume.skills }]
-      : [];
-  if (groups.length) {
-    parts.push('SKILLS');
-    for (const group of groups) {
-      parts.push(`${group.category}: ${group.items.join(', ')}`);
+  if (resume.education?.length) {
+    parts.push('EDUCATION');
+    for (const entry of resume.education) {
+      const schoolLine = [entry.school, entry.location].filter(Boolean).join(' — ');
+      if (schoolLine) parts.push(schoolLine);
+      const degreeLine = [
+        [entry.degree, ...entry.details.map(stripBulletPrefix).filter(Boolean)].filter(Boolean).join(', '),
+        entry.year,
+      ]
+        .filter(Boolean)
+        .join(' — ');
+      if (degreeLine) parts.push(degreeLine);
+      parts.push('');
     }
-    parts.push('');
   }
 
   if (resume.experience?.length) {
     parts.push('EXPERIENCE');
     for (const role of resume.experience) {
-      parts.push(`${role.title} | ${role.company}`);
-      if (role.dates) parts.push(role.dates);
+      parts.push([role.title, role.dates].filter(Boolean).join(' — '));
+      const companyLine = [role.company, role.location].filter(Boolean).join(' — ');
+      if (companyLine) parts.push(companyLine);
       for (const bullet of role.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
       parts.push('');
     }
@@ -456,26 +464,27 @@ export function renderResumeText(resume: {
   if (resume.projects?.length) {
     parts.push('PROJECTS');
     for (const project of resume.projects) {
-      parts.push(project.name);
+      parts.push([project.name, project.tech].filter(Boolean).join(' | '));
       for (const bullet of project.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
       parts.push('');
     }
   }
 
-  if (resume.education?.length) {
-    parts.push('EDUCATION');
-    for (const entry of resume.education) {
-      const schoolLine = [entry.school, entry.location].filter(Boolean).join(' — ');
-      if (schoolLine) parts.push(schoolLine);
-      const degreeLine = [entry.degree, entry.year].filter(Boolean).join(', ');
-      if (degreeLine) parts.push(degreeLine);
-      for (const detail of entry.details) parts.push(`- ${stripBulletPrefix(detail)}`);
-      parts.push('');
+  const groups = resume.skillGroups?.length
+    ? resume.skillGroups
+    : resume.skills?.length
+      ? [{ category: 'Skills', items: resume.skills }]
+      : [];
+  if (groups.length) {
+    parts.push('TECHNICAL SKILLS');
+    for (const group of groups) {
+      parts.push(`${group.category}: ${group.items.join(', ')}`);
     }
+    parts.push('');
   }
 
   if (resume.certifications?.length) {
-    parts.push('CERTIFICATIONS', resume.certifications.map(stripBulletPrefix).join(' · '), '');
+    parts.push('CERTIFICATIONS', ...resume.certifications.map(stripBulletPrefix).filter(Boolean), '');
   }
 
   for (const section of resume.sections ?? []) {
@@ -553,15 +562,17 @@ function toExperience(value: unknown): ExperienceEntry[] {
     const entry = item as {
       title?: unknown;
       company?: unknown;
+      location?: unknown;
       dates?: unknown;
       bullets?: unknown;
     };
     const title = typeof entry.title === 'string' ? entry.title.trim() : '';
     const company = typeof entry.company === 'string' ? entry.company.trim() : '';
+    const location = typeof entry.location === 'string' ? entry.location.trim() : '';
     const dates = typeof entry.dates === 'string' ? entry.dates.trim() : '';
     const bullets = toStringList(entry.bullets, 12);
     if (!title && !company && !bullets.length) continue;
-    roles.push({ title: title || 'Role', company, dates, bullets });
+    roles.push({ title: title || 'Role', company, location, dates, bullets });
   }
   return roles;
 }
@@ -629,6 +640,7 @@ export function reconcileExperience(
     return {
       title: match?.title?.trim() || original.title,
       company: original.company,
+      location: original.location ?? match?.location ?? '',
       dates: original.dates,
       bullets,
     };
@@ -644,11 +656,17 @@ function toProjects(value: unknown): ProjectEntry[] {
   const projects: ProjectEntry[] = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
-    const entry = item as { name?: unknown; bullets?: unknown };
-    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const entry = item as { name?: unknown; tech?: unknown; bullets?: unknown };
+    const rawName = typeof entry.name === 'string' ? entry.name.trim() : '';
+    let tech = typeof entry.tech === 'string' ? entry.tech.trim() : '';
+    // Models often fold the stack into the name as "Checkout Service | Java, Redis";
+    // split it back out so the renderer can set the two halves in different weights.
+    const pipe = rawName.indexOf('|');
+    const name = pipe >= 0 ? rawName.slice(0, pipe).trim() : rawName;
+    if (!tech && pipe >= 0) tech = rawName.slice(pipe + 1).trim();
     const bullets = toStringList(entry.bullets, 3);
     if (!name && !bullets.length) continue;
-    projects.push({ name: name || 'Project', bullets });
+    projects.push({ name: name || 'Project', tech, bullets });
   }
   return projects.slice(0, 6);
 }

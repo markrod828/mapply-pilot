@@ -90,12 +90,16 @@ export interface SkillGroup {
 export interface ExperienceEntry {
   title: string;
   company: string;
+  /** Optional. Rendered right-aligned opposite the company, as a classic resume does. */
+  location?: string;
   dates: string;
   bullets: string[];
 }
 
 export interface ProjectEntry {
   name: string;
+  /** Optional stack line, rendered after the name as "NAME | React, Node.js". */
+  tech?: string;
   bullets: string[];
 }
 

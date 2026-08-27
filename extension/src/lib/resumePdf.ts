@@ -17,24 +17,30 @@ interface TemplateStyle {
   bodySize: number;
   bullet: string;
   headingRule: boolean;
+  /** Job titles, project names and degrees set in caps, the way a traditional resume does. */
+  caps: boolean;
   accent: [number, number, number];
-  muted: [number, number, number];
+  /** Dates, locations and the contact line. */
+  meta: [number, number, number];
 }
 
 export const TEMPLATES: Record<ResumeTemplate, { label: string; description: string; style: TemplateStyle }> = {
   classic: {
     label: 'Classic',
-    description: 'Centred serif header with ruled section headings. Safe for conservative industries.',
+    description:
+      'Centred serif header, ruled headings, dates and locations pinned right. Safe for conservative industries.',
     style: {
       font: 'times',
       align: 'center',
-      nameSize: 18,
-      headingSize: 10.5,
+      nameSize: 22,
+      headingSize: 12,
       bodySize: 9.5,
-      bullet: '\u2022',
+      bullet: '•',
       headingRule: true,
+      caps: true,
       accent: [15, 23, 42],
-      muted: [71, 85, 105],
+      // The classic sheet is all one ink; only the modern template greys its meta down.
+      meta: [15, 23, 42],
     },
   },
   modern: {
@@ -46,19 +52,23 @@ export const TEMPLATES: Record<ResumeTemplate, { label: string; description: str
       nameSize: 20,
       headingSize: 10,
       bodySize: 9.25,
-      bullet: '\u2013',
+      bullet: '–',
       headingRule: false,
+      caps: false,
       accent: [2, 132, 199],
-      muted: [100, 116, 139],
+      meta: [100, 116, 139],
     },
   },
 };
 
-const MARGIN = 48;
+const MARGIN = 46;
+const TEXT: [number, number, number] = [15, 23, 42];
 
 /**
  * Renders a single-column, recruiter-readable PDF. Both templates stay
- * parser-friendly: no tables, columns, text boxes or graphics.
+ * parser-friendly: no tables, columns, text boxes or graphics. The right-hand dates
+ * and locations are right-aligned text on the same baseline rather than a table, so
+ * a parser still reads each entry as one continuous run.
  */
 export async function buildResumePdf(
   profile: Profile,
@@ -72,6 +82,7 @@ export async function buildResumePdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - MARGIN * 2;
+  const rightEdge = pageWidth - MARGIN;
   const lineHeight = style.bodySize * 1.32;
   let y = MARGIN;
 
@@ -96,7 +107,7 @@ export async function buildResumePdf(
     const size = options.size ?? style.bodySize;
     const align = options.align ?? 'left';
     const indent = options.indent ?? 0;
-    const color = options.color ?? [15, 23, 42];
+    const color = options.color ?? TEXT;
     const gap = options.gap ?? size * 1.32;
 
     doc.setFont(style.font, options.weight ?? 'normal');
@@ -113,15 +124,85 @@ export async function buildResumePdf(
     }
   };
 
-  /** Height of `text` at a given size, so a block can reserve room for what follows it. */
-  const measure = (text: string, size: number, weight: 'normal' | 'bold', gap: number) => {
-    doc.setFont(style.font, weight);
+  /**
+   * One entry line with its meta pinned to the right margin — "TITLE ....... dates".
+   * The right column's width is reserved before the left text wraps, so a long title
+   * breaks onto a second line instead of colliding with the dates.
+   */
+  const row = (
+    left: string,
+    right: string,
+    options: {
+      size?: number;
+      leftWeight?: 'normal' | 'bold' | 'italic';
+      rightWeight?: 'normal' | 'bold' | 'italic';
+      color?: [number, number, number];
+    } = {},
+  ) => {
+    if (!left && !right) return;
+    const size = options.size ?? style.bodySize;
+    const gap = size * 1.32;
+    const leftWeight = options.leftWeight ?? 'bold';
+    const rightWeight = options.rightWeight ?? 'normal';
+
     doc.setFontSize(size);
-    return (doc.splitTextToSize(text, contentWidth) as string[]).length * gap;
+    doc.setTextColor(...(options.color ?? TEXT));
+
+    doc.setFont(style.font, rightWeight);
+    const rightWidth = right ? doc.getTextWidth(right) + 14 : 0;
+
+    doc.setFont(style.font, leftWeight);
+    const lines = left ? (doc.splitTextToSize(left, contentWidth - rightWidth) as string[]) : [];
+    newPageIfNeeded(gap * Math.max(lines.length, 1));
+
+    if (right) {
+      doc.setFont(style.font, rightWeight);
+      doc.text(right, rightEdge, y, { align: 'right' });
+    }
+
+    doc.setFont(style.font, leftWeight);
+    for (const line of lines) {
+      doc.text(line, MARGIN, y);
+      y += gap;
+    }
+    if (!lines.length) y += gap;
+  };
+
+  /**
+   * Mixed-weight text flowing on one wrapping line, e.g. a bold label followed by
+   * normal content. Laid out token by token because jsPDF only wraps a single font.
+   */
+  const writeRich = (
+    segments: { text: string; weight: 'normal' | 'bold' | 'italic' }[],
+    size = style.bodySize,
+  ) => {
+    const gap = size * 1.32;
+    doc.setFontSize(size);
+    doc.setTextColor(...TEXT);
+    newPageIfNeeded(gap);
+    let x = MARGIN;
+
+    for (const segment of segments) {
+      doc.setFont(style.font, segment.weight);
+      for (const token of segment.text.split(/(\s+)/)) {
+        if (!token) continue;
+        const width = doc.getTextWidth(token);
+        if (x + width > rightEdge && x > MARGIN) {
+          y += gap;
+          x = MARGIN;
+          newPageIfNeeded(gap);
+          // A wrap swallows the space that caused it, so the new line starts flush.
+          if (/^\s+$/.test(token)) continue;
+        }
+        doc.text(token, x, y);
+        x += width;
+      }
+    }
+    y += gap;
   };
 
   const sectionHeading = (text: string) => {
-    y += 8;
+    y += 9;
     // Reserve the heading, its rule, and one line of whatever follows, so a heading
     // never ends up stranded at the foot of a page.
     newPageIfNeeded(style.headingSize * 1.15 + (style.headingRule ? 5 : 1) + lineHeight);
@@ -134,7 +215,7 @@ export async function buildResumePdf(
     if (style.headingRule) {
       doc.setDrawColor(...style.accent);
       doc.setLineWidth(0.6);
-      doc.line(MARGIN, y - 1, pageWidth - MARGIN, y - 1);
+      doc.line(MARGIN, y - 1, rightEdge, y - 1);
       y += 4;
     } else {
       y += 1;
@@ -148,7 +229,7 @@ export async function buildResumePdf(
     newPageIfNeeded(lineHeight);
     doc.setFont(style.font, 'normal');
     doc.setFontSize(style.bodySize);
-    doc.setTextColor(15, 23, 42);
+    doc.setTextColor(...TEXT);
     doc.text(style.bullet, MARGIN + 2, y);
     for (const line of lines) {
       newPageIfNeeded(lineHeight);
@@ -157,77 +238,67 @@ export async function buildResumePdf(
     }
   };
 
+  const entryTitle = (text: string) => (style.caps ? text.toUpperCase() : text);
+
   const writeRole = (role: ExperienceEntry) => {
-    y += 3;
-    const titleLine = [role.title, role.company].filter(Boolean).join('  |  ');
-    // Keep the title, its dates and at least the first bullet together.
-    newPageIfNeeded(
-      measure(titleLine, style.bodySize + 0.5, 'bold', lineHeight) +
-        (role.dates ? lineHeight : 0) +
-        (role.bullets.length ? lineHeight : 0),
-    );
-    write(titleLine, { weight: 'bold', size: style.bodySize + 0.5, gap: lineHeight });
-    if (role.dates) {
-      write(role.dates, {
-        weight: 'italic',
-        size: style.bodySize - 0.5,
-        color: style.muted,
-        gap: lineHeight,
+    y += 4;
+    // Hold the title, the company line and the first bullet together on one page.
+    newPageIfNeeded(lineHeight * (role.bullets.length ? 3 : 2));
+    row(entryTitle(role.title), role.dates, { size: style.bodySize + 0.5 });
+    if (role.company || role.location) {
+      row(role.company, role.location ?? '', {
+        leftWeight: 'italic',
+        rightWeight: 'italic',
+        color: style.meta,
       });
     }
     for (const bullet of role.bullets) writeBullet(bullet);
   };
 
   const writeProject = (project: ProjectEntry) => {
-    y += 2;
-    newPageIfNeeded(
-      measure(project.name, style.bodySize + 0.25, 'bold', lineHeight) +
-        (project.bullets.length ? lineHeight : 0),
-    );
-    write(project.name, { weight: 'bold', size: style.bodySize + 0.25, gap: lineHeight });
+    y += 3;
+    newPageIfNeeded(lineHeight * 2);
+    const segments: { text: string; weight: 'normal' | 'bold' | 'italic' }[] = [
+      { text: entryTitle(project.name), weight: 'bold' },
+    ];
+    if (project.tech) segments.push({ text: `  |  ${project.tech}`, weight: 'normal' });
+    writeRich(segments);
     for (const bullet of project.bullets.slice(0, 3)) writeBullet(bullet);
   };
 
   const writeEducation = (entry: EducationEntry) => {
-    y += 2;
-    const schoolLine = [entry.school, entry.location].filter(Boolean).join('  —  ');
-    const degreeText = [entry.degree, entry.year].filter(Boolean).join(', ');
-    if (schoolLine) {
-      newPageIfNeeded(
-        measure(schoolLine, style.bodySize, 'bold', lineHeight) + (degreeText ? lineHeight : 0),
-      );
-      write(schoolLine, { weight: 'bold', gap: lineHeight });
+    y += 4;
+    newPageIfNeeded(lineHeight * 2);
+    row(entry.school, entry.location);
+    // Coursework and honours ride on the degree line rather than becoming bullets,
+    // which is what keeps an education block to the two lines the reference uses.
+    const degree = [entryTitle(entry.degree), ...entry.details.map(stripBulletPrefix).filter(Boolean)]
+      .filter(Boolean)
+      .join(', ');
+    if (degree || entry.year) {
+      row(degree, entry.year, { leftWeight: 'italic', rightWeight: 'italic', color: style.meta });
     }
-    if (degreeText) write(degreeText, { gap: lineHeight });
-    for (const detail of entry.details.slice(0, 2)) writeBullet(detail);
   };
 
   const writeSkillGroups = (groups: SkillGroup[]) => {
     for (const group of groups) {
-      newPageIfNeeded(lineHeight);
-      doc.setFont(style.font, 'bold');
-      doc.setFontSize(style.bodySize);
-      doc.setTextColor(15, 23, 42);
-      const label = `${group.category}: `;
-      const labelWidth = doc.getTextWidth(label);
-      doc.text(label, MARGIN, y);
-
-      doc.setFont(style.font, 'normal');
-      const restLines = doc.splitTextToSize(group.items.join(', '), contentWidth - labelWidth) as string[];
-      doc.text(restLines[0] ?? '', MARGIN + labelWidth, y);
-      y += lineHeight;
-      for (const continuation of restLines.slice(1)) {
-        newPageIfNeeded(lineHeight);
-        doc.text(continuation, MARGIN + labelWidth, y);
-        y += lineHeight;
-      }
+      writeRich([
+        { text: `${group.category}:`, weight: 'bold' },
+        // The gap leads the normal run rather than trailing the bold one, so a group
+        // whose items wrap does not start its second line with a stray indent.
+        { text: `  ${group.items.join(', ')}`, weight: 'normal' },
+      ]);
     }
   };
 
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   if (fullName) {
-    write(fullName, { size: style.nameSize, weight: 'bold', align: style.align, gap: style.nameSize * 1.1 });
-    y += 1;
+    write(fullName, {
+      size: style.nameSize,
+      weight: 'bold',
+      align: style.align,
+      gap: style.nameSize * 1.12,
+    });
   }
 
   if (resume.headline) {
@@ -240,25 +311,26 @@ export async function buildResumePdf(
     });
   }
 
+  // Location leads, then the ways to reach you — the order a classic header uses.
   const contactLine = [
+    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
     profile.email,
     profile.phone,
-    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
     profile.linkedin,
     profile.github,
     profile.portfolio,
   ]
     .filter(Boolean)
-    .join('  ·  ');
+    .join('  |  ');
   if (contactLine) {
-    write(contactLine, { size: style.bodySize - 0.75, align: style.align, color: style.muted, gap: lineHeight });
+    write(contactLine, { align: style.align, color: style.meta, gap: lineHeight });
   }
 
   if (style.align === 'left') {
     y += 5;
     doc.setDrawColor(...style.accent);
     doc.setLineWidth(1.2);
-    doc.line(MARGIN, y, pageWidth - MARGIN, y);
+    doc.line(MARGIN, y, rightEdge, y);
     y += 3;
   }
 
@@ -267,15 +339,9 @@ export async function buildResumePdf(
     write(resume.summary, { gap: lineHeight });
   }
 
-  const skillGroups =
-    resume.skillGroups?.length > 0
-      ? resume.skillGroups
-      : resume.skills?.length
-        ? [{ category: 'Skills', items: resume.skills }]
-        : [];
-  if (skillGroups.length) {
-    sectionHeading('Skills');
-    writeSkillGroups(skillGroups);
+  if (resume.education?.length) {
+    sectionHeading('Education');
+    for (const entry of resume.education) writeEducation(entry);
   }
 
   if (resume.experience?.length) {
@@ -288,14 +354,22 @@ export async function buildResumePdf(
     for (const project of resume.projects) writeProject(project);
   }
 
-  if (resume.education?.length) {
-    sectionHeading('Education');
-    for (const entry of resume.education) writeEducation(entry);
+  const skillGroups =
+    resume.skillGroups?.length > 0
+      ? resume.skillGroups
+      : resume.skills?.length
+        ? [{ category: 'Skills', items: resume.skills }]
+        : [];
+  if (skillGroups.length) {
+    sectionHeading('Technical Skills');
+    writeSkillGroups(skillGroups);
   }
 
   if (resume.certifications?.length) {
     sectionHeading('Certifications');
-    write(resume.certifications.map(stripBulletPrefix).filter(Boolean).join('  ·  '), { gap: lineHeight });
+    for (const cert of resume.certifications.map(stripBulletPrefix).filter(Boolean)) {
+      write(cert, { gap: lineHeight });
+    }
   }
 
   for (const section of resume.sections ?? []) {

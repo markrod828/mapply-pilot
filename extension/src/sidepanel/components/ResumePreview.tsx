@@ -38,9 +38,9 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
   const line = (text: string) => (diff ? renderDiff(text, diff) : formatLine(text, highlights));
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const contact = [
+    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
     profile.email,
     profile.phone,
-    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
     profile.linkedin,
     profile.github,
     profile.portfolio,
@@ -58,7 +58,7 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
       <header className="paper-header">
         <div className="paper-name">{fullName || 'Your name'}</div>
         {resume.headline && <div className="paper-headline">{line(resume.headline)}</div>}
-        {contact.length > 0 && <div className="paper-contact">{contact.join('  ·  ')}</div>}
+        {contact.length > 0 && <div className="paper-contact">{contact.join('  |  ')}</div>}
       </header>
 
       {resume.summary && (
@@ -68,9 +68,80 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
         </section>
       )}
 
+      {resume.education && resume.education.length > 0 && (
+        <section>
+          <h4>Education</h4>
+          {resume.education.map((entry, index) => (
+            <div className="entry" key={`${entry.school}-${index}`}>
+              <div className="entry-row">
+                <span className="entry-name">{entry.school}</span>
+                <span className="entry-meta">{entry.location}</span>
+              </div>
+              <div className="entry-row entry-sub">
+                <span>
+                  <span className="caps">{entry.degree}</span>
+                  {entry.details.map(stripBulletPrefix).filter(Boolean).length > 0 &&
+                    `, ${entry.details.map(stripBulletPrefix).filter(Boolean).join(', ')}`}
+                </span>
+                <span className="entry-meta">{entry.year}</span>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {resume.experience && resume.experience.length > 0 && (
+        <section>
+          <h4>Experience</h4>
+          {resume.experience.map((role, index) => (
+            <div className="entry" key={`${role.title}-${role.company}-${index}`}>
+              <div className="entry-row">
+                <span className="entry-name caps">{role.title}</span>
+                <span className="entry-meta">{role.dates}</span>
+              </div>
+              {(role.company || role.location) && (
+                <div className="entry-row entry-sub">
+                  <span>{role.company}</span>
+                  <span className="entry-meta">{role.location}</span>
+                </div>
+              )}
+              <ul>
+                {role.bullets.map((bullet, bulletIndex) => (
+                  <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
+                    {line(stripBulletPrefix(bullet))}
+                  </li>
+                ))}
+                {droppedItems(diff, index)}
+              </ul>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {resume.projects && resume.projects.length > 0 && (
+        <section>
+          <h4>Projects</h4>
+          {resume.projects.map((project, index) => (
+            <div className="entry" key={`${project.name}-${index}`}>
+              <div className="entry-name">
+                <span className="caps">{project.name}</span>
+                {project.tech && <span className="entry-tech">{`  |  ${project.tech}`}</span>}
+              </div>
+              <ul>
+                {project.bullets.slice(0, 3).map((bullet, bulletIndex) => (
+                  <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
+                    {line(stripBulletPrefix(bullet))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </section>
+      )}
+
       {skillGroups.length > 0 && (
         <section>
-          <h4>Skills</h4>
+          <h4>Technical Skills</h4>
           <div className="skill-groups">
             {skillGroups.map((group) => (
               <div className="skill-row" key={group.category}>
@@ -91,75 +162,15 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
         </section>
       )}
 
-      {resume.experience && resume.experience.length > 0 && (
-        <section>
-          <h4>Experience</h4>
-          {resume.experience.map((role, index) => (
-            <div className="role" key={`${role.title}-${role.company}-${index}`}>
-              <div className="role-title">
-                {[role.title, role.company].filter(Boolean).join('  |  ')}
-              </div>
-              {role.dates && <div className="role-dates">{role.dates}</div>}
-              <ul>
-                {role.bullets.map((bullet, bulletIndex) => (
-                  <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
-                    {line(stripBulletPrefix(bullet))}
-                  </li>
-                ))}
-                {droppedItems(diff, index)}
-              </ul>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {resume.projects && resume.projects.length > 0 && (
-        <section>
-          <h4>Projects</h4>
-          {resume.projects.map((project, index) => (
-            <div className="role" key={`${project.name}-${index}`}>
-              <div className="role-title">{project.name}</div>
-              <ul>
-                {project.bullets.slice(0, 3).map((bullet, bulletIndex) => (
-                  <li key={`${bullet.slice(0, 24)}-${bulletIndex}`}>
-                    {line(stripBulletPrefix(bullet))}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {resume.education && resume.education.length > 0 && (
-        <section>
-          <h4>Education</h4>
-          {resume.education.map((entry, index) => (
-            <div className="role" key={`${entry.school}-${index}`}>
-              <div className="role-title">
-                {[entry.school, entry.location].filter(Boolean).join('  —  ')}
-              </div>
-              {[entry.degree, entry.year].filter(Boolean).length > 0 && (
-                <div className="role-dates">{[entry.degree, entry.year].filter(Boolean).join(', ')}</div>
-              )}
-              {entry.details.length > 0 && (
-                <ul>
-                  {entry.details.slice(0, 2).map((detail, detailIndex) => (
-                    <li key={`${detail.slice(0, 24)}-${detailIndex}`}>
-                      {formatLine(stripBulletPrefix(detail), highlights)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </section>
-      )}
-
       {resume.certifications && resume.certifications.length > 0 && (
         <section>
           <h4>Certifications</h4>
-          <p>{formatLine(resume.certifications.map(stripBulletPrefix).filter(Boolean).join('  ·  '), highlights)}</p>
+          {resume.certifications
+            .map(stripBulletPrefix)
+            .filter(Boolean)
+            .map((cert, index) => (
+              <p key={`${cert}-${index}`}>{formatLine(cert, highlights)}</p>
+            ))}
         </section>
       )}
 

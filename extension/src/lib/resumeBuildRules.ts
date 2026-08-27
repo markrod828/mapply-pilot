@@ -7,8 +7,8 @@ export const RESUME_BUILD_RULES = `RESUME BUILDING RULES (follow every one):
 Golden rule: make the employer's job easier. In 10–15 seconds they should see:
 WHO YOU ARE → WHAT YOU CAN DO → WHAT YOU'VE ACCOMPLISHED → WHY YOU FIT THIS JOB
 
-1. Easy to scan: clear standard headings (Summary, Skills, Experience, Education, Certifications),
-   short bullets, generous white space. No walls of text.
+1. Easy to scan: clear standard headings (Summary, Education, Experience, Projects, Technical
+   Skills, Certifications), short bullets, generous white space. No walls of text.
 
 2. Strategic emphasis: job titles, certifications, and measurable results stand out through structure
    and word choice—not decorative formatting or bolding entire paragraphs.
@@ -26,8 +26,8 @@ WHO YOU ARE → WHAT YOU CAN DO → WHAT YOU'VE ACCOMPLISHED → WHY YOU FIT THI
 
 6. Customize for this job: mirror the posting's vocabulary where your experience supports it.
 
-7. Section order (the renderer enforces this): Summary → Skills → Experience → Projects →
-   Education → Certifications. Strongest selling points near the top.
+7. Section order (the renderer enforces this): Summary → Education → Experience → Projects →
+   Technical Skills → Certifications.
 
 8. Professional design: one readable font family, consistent headings and spacing, dark text,
    minimal color. No graphics, icons, charts, photos or decorative elements.
