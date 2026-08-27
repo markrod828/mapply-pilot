@@ -1,7 +1,8 @@
 import { Fragment } from 'react';
 import type { DiffPart } from '../../lib/diffText';
 import { splitMetricParts } from '../../lib/resumeBuildRules';
-import { stripBulletPrefix } from '../../lib/resumeFormat';
+import { formatLocation } from '../../lib/profile';
+import { formatDateRange, stripBulletPrefix } from '../../lib/resumeFormat';
 import type { ResumeDiff } from '../../lib/resumeDiff';
 import type {
   EducationEntry,
@@ -38,7 +39,7 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
   const line = (text: string) => (diff ? renderDiff(text, diff) : formatLine(text, highlights));
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const contact = [
-    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
+    formatLocation(profile.address),
     profile.email,
     profile.phone,
     profile.linkedin,
@@ -83,7 +84,9 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
                   {entry.details.map(stripBulletPrefix).filter(Boolean).length > 0 &&
                     `, ${entry.details.map(stripBulletPrefix).filter(Boolean).join(', ')}`}
                 </span>
-                <span className="entry-meta">{entry.year}</span>
+                <span className="entry-meta">
+                  {formatDateRange(entry.startDate, entry.endDate)}
+                </span>
               </div>
             </div>
           ))}
@@ -97,7 +100,9 @@ export function ResumePreview({ profile, resume, template, highlights, diff }: P
             <div className="entry" key={`${role.title}-${role.company}-${index}`}>
               <div className="entry-row">
                 <span className="entry-name caps">{role.title}</span>
-                <span className="entry-meta">{role.dates}</span>
+                <span className="entry-meta">
+                  {formatDateRange(role.startDate, role.endDate)}
+                </span>
               </div>
               {(role.company || role.location) && (
                 <div className="entry-row entry-sub">

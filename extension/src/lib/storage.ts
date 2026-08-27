@@ -1,7 +1,6 @@
 import {
   DEFAULT_SETTINGS,
   DEFAULT_TAILOR_OPTIONS,
-  EMPTY_PROFILE,
   type AtsScore,
   type JobRecord,
   type Profile,
@@ -9,6 +8,7 @@ import {
   type Settings,
   type TailoredResume,
 } from './types';
+import { migrateProfile } from './profile';
 import { parseStructured, renderResumeText } from './tailor';
 
 const KEYS = {
@@ -33,7 +33,7 @@ export async function setSettings(settings: Settings): Promise<void> {
 }
 
 export async function getProfile(): Promise<Profile> {
-  return { ...EMPTY_PROFILE, ...(await read<Partial<Profile>>(KEYS.profile, {})) };
+  return migrateProfile(await read<Partial<Profile>>(KEYS.profile, {}));
 }
 
 export async function setProfile(profile: Profile): Promise<void> {

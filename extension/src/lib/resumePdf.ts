@@ -1,4 +1,5 @@
-import { stripBulletPrefix } from './resumeFormat';
+import { formatLocation } from './profile';
+import { formatDateRange, stripBulletPrefix } from './resumeFormat';
 import type {
   EducationEntry,
   ExperienceEntry,
@@ -244,7 +245,9 @@ export async function buildResumePdf(
     y += 4;
     // Hold the title, the company line and the first bullet together on one page.
     newPageIfNeeded(lineHeight * (role.bullets.length ? 3 : 2));
-    row(entryTitle(role.title), role.dates, { size: style.bodySize + 0.5 });
+    row(entryTitle(role.title), formatDateRange(role.startDate, role.endDate), {
+      size: style.bodySize + 0.5,
+    });
     if (role.company || role.location) {
       row(role.company, role.location ?? '', {
         leftWeight: 'italic',
@@ -275,8 +278,9 @@ export async function buildResumePdf(
     const degree = [entryTitle(entry.degree), ...entry.details.map(stripBulletPrefix).filter(Boolean)]
       .filter(Boolean)
       .join(', ');
-    if (degree || entry.year) {
-      row(degree, entry.year, { leftWeight: 'italic', rightWeight: 'italic', color: style.meta });
+    const years = formatDateRange(entry.startDate, entry.endDate);
+    if (degree || years) {
+      row(degree, years, { leftWeight: 'italic', rightWeight: 'italic', color: style.meta });
     }
   };
 
@@ -313,7 +317,7 @@ export async function buildResumePdf(
 
   // Location leads, then the ways to reach you — the order a classic header uses.
   const contactLine = [
-    [profile.city, profile.state, profile.country].filter(Boolean).join(', '),
+    formatLocation(profile.address),
     profile.email,
     profile.phone,
     profile.linkedin,

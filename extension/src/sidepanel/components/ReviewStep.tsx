@@ -331,13 +331,27 @@ export function ReviewStep({ record, profile, settings, originalText, pending, r
                     />
                   </div>
                   <div>
-                    <label htmlFor={`exp-dates-${index}`}>Dates</label>
+                    <label htmlFor={`exp-start-${index}`}>Start</label>
                     <input
-                      id={`exp-dates-${index}`}
-                      value={role.dates}
+                      id={`exp-start-${index}`}
+                      placeholder="June 2022"
+                      value={role.startDate}
                       onChange={(event) => {
                         const experience = [...draft.experience];
-                        experience[index] = { ...role, dates: event.target.value };
+                        experience[index] = { ...role, startDate: event.target.value };
+                        update({ experience });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`exp-end-${index}`}>End</label>
+                    <input
+                      id={`exp-end-${index}`}
+                      placeholder="Present"
+                      value={role.endDate}
+                      onChange={(event) => {
+                        const experience = [...draft.experience];
+                        experience[index] = { ...role, endDate: event.target.value };
                         update({ experience });
                       }}
                     />
@@ -424,13 +438,27 @@ export function ReviewStep({ record, profile, settings, originalText, pending, r
                     />
                   </div>
                   <div>
-                    <label htmlFor={`edu-year-${index}`}>Year</label>
+                    <label htmlFor={`edu-start-${index}`}>Start</label>
                     <input
-                      id={`edu-year-${index}`}
-                      value={entry.year}
+                      id={`edu-start-${index}`}
+                      placeholder="Optional"
+                      value={entry.startDate}
                       onChange={(event) => {
                         const education = [...draft.education];
-                        education[index] = { ...entry, year: event.target.value };
+                        education[index] = { ...entry, startDate: event.target.value };
+                        update({ education });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`edu-end-${index}`}>Completed</label>
+                    <input
+                      id={`edu-end-${index}`}
+                      placeholder="2019"
+                      value={entry.endDate}
+                      onChange={(event) => {
+                        const education = [...draft.education];
+                        education[index] = { ...entry, endDate: event.target.value };
                         update({ education });
                       }}
                     />

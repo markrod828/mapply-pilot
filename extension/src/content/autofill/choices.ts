@@ -101,11 +101,18 @@ function buttonGroups(): ChoiceGroup[] {
   const seen = new Set<Element>();
 
   const buttons = Array.from(
-    document.querySelectorAll<HTMLElement>('button[type="button"], [role="button"]'),
+    // A <button> with no type attribute is a submit button, so a bare `button` selector
+    // could press "Apply". Each of these says the author meant a toggle instead:
+    // aria-pressed is the ARIA toggle state, and Ashby marks its Yes/No pair with
+    // data-option and no type attribute at all.
+    document.querySelectorAll<HTMLElement>(
+      'button[type="button"], button[aria-pressed], button[data-option], [role="button"]',
+    ),
   ).filter(
     (button) =>
       isVisible(button) &&
       !(button as HTMLButtonElement).disabled &&
+      !isSubmitLike(button) &&
       !button.closest('[role="radiogroup"]') &&
       isOptionLike(text(button)),
   );
@@ -136,6 +143,12 @@ function buttonGroups(): ChoiceGroup[] {
   }
 
   return groups;
+}
+
+/** A button that would submit or reset the form is never an answer to a question. */
+function isSubmitLike(element: HTMLElement): boolean {
+  const type = element.getAttribute('type');
+  return type === 'submit' || type === 'reset';
 }
 
 function isOptionLike(label: string): boolean {

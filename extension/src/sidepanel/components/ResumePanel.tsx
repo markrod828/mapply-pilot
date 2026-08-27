@@ -5,6 +5,8 @@ import { setResume } from '../../lib/storage';
 import type { ResumeDoc } from '../../lib/types';
 import { useAction } from '../hooks';
 
+const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
 export function ResumePanel({ resume }: { resume: ResumeDoc | null }) {
   const { pending, error, run, setError } = useAction();
   const [text, setText] = useState(resume?.text ?? '');
@@ -59,6 +61,15 @@ export function ResumePanel({ resume }: { resume: ResumeDoc | null }) {
           <div className="small muted">
             {resume.fileName} · updated {new Date(resume.updatedAt).toLocaleDateString()}
             {resume.size > 0 && ` · ${Math.round(resume.size / 1024)} KB original kept for uploads`}
+            {/* Parsing happens on the first tailor, so this stays absent until then. */}
+            {resume.data && (
+              <>
+                <br />
+                Read into fields: {countLabel(resume.data.experience.length, 'role')},{' '}
+                {countLabel(resume.data.education.length, 'school')},{' '}
+                {countLabel(resume.data.skills.length, 'skill')}.
+              </>
+            )}
           </div>
         ) : (
           <div className="small muted">No resume yet. Upload a PDF or paste the text below.</div>

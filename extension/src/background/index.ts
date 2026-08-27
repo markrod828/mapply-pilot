@@ -12,12 +12,21 @@ import {
   hashText,
   saveJob,
   setActiveJobKey,
+  setResume,
   updateJob,
 } from '../lib/storage';
 import { answerFormQuestions, type FormQuestion, type QuestionAnswer } from '../lib/questions';
+import { parseResumeDocument } from '../lib/resumeParse';
 import { resumeFileName } from '../lib/resumePdf';
 import { refineResume, tailorResume } from '../lib/tailor';
-import type { AtsScore, JobPosting, JobRecord, TailorOptions } from '../lib/types';
+import type {
+  AtsScore,
+  JobPosting,
+  JobRecord,
+  ResumeDoc,
+  StructuredResume,
+  TailorOptions,
+} from '../lib/types';
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
@@ -191,6 +200,33 @@ async function runScore(job: JobPosting, force: boolean, tabId?: number) {
   }
 }
 
+/**
+ * Parses the stored resume into fields once and caches it on the document.
+ *
+ * Called only from the tailor path, which already pays for an extraction round-trip: the
+ * first tailor costs the same as before and every one after it saves that call. Returns
+ * null whenever it cannot parse, and the caller falls back to the raw-text path.
+ */
+async function ensureResumeData(
+  resume: ResumeDoc,
+  apiKey: string,
+  model: string,
+): Promise<StructuredResume | null> {
+  if (resume.data) return resume.data;
+
+  const data = await parseResumeDocument({ apiKey, model, resumeText: resume.text });
+  if (!data) return null;
+
+  // The parse is slow enough that the resume may have been re-uploaded or edited while it
+  // ran. Caching it against different text would pin the tailor to a stale history, so
+  // only write it back when what we parsed is still what is stored.
+  const current = await getResume();
+  if (current && current.text === resume.text) {
+    await setResume({ ...current, data, parsedAt: Date.now() });
+  }
+  return data;
+}
+
 async function runTailor(jobKey: string, options: TailorOptions) {
   const settings = await getSettings();
   const resume = await getResume();
@@ -198,10 +234,13 @@ async function runTailor(jobKey: string, options: TailorOptions) {
   if (!resume?.text) return { ok: false, error: 'Upload your default resume first.' };
   if (!record) return { ok: false, error: 'That job is no longer cached. Reopen it on Jobright.' };
 
+  const baseData = await ensureResumeData(resume, settings.openaiApiKey, settings.tailorModel);
+
   const tailored = await tailorResume({
     apiKey: settings.openaiApiKey,
     model: settings.tailorModel,
     resumeText: resume.text,
+    baseData: baseData ?? undefined,
     job: record.job,
     baseScore: record.baseScore,
     options,

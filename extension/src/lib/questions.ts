@@ -1,5 +1,6 @@
 import { truncate } from './atsScore';
 import { chatJson } from './openai';
+import { formatLocation } from './profile';
 import type { JobPosting, Profile } from './types';
 
 const SYSTEM_PROMPT = `You are helping a candidate fill in the screening questions on a job
@@ -112,8 +113,7 @@ function describeProfile(profile: Profile): string {
   const lines = [
     profile.currentTitle && `Current title: ${profile.currentTitle}`,
     profile.yearsExperience && `Years of experience: ${profile.yearsExperience}`,
-    [profile.city, profile.state, profile.country].filter(Boolean).join(', ') &&
-      `Location: ${[profile.city, profile.state, profile.country].filter(Boolean).join(', ')}`,
+    formatLocation(profile.address) && `Location: ${formatLocation(profile.address)}`,
     profile.workAuthorization && `Work authorization: ${profile.workAuthorization}`,
     profile.requiresSponsorship && `Requires visa sponsorship: ${profile.requiresSponsorship}`,
     profile.salaryExpectation && `Salary expectation: ${profile.salaryExpectation}`,

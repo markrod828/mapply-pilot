@@ -187,6 +187,17 @@ function answerForGroup(payload: AutofillPayload, label: string): string | null 
   if (/authorized to work|work authorization|right to work|legally/.test(label) && profile.workAuthorization) {
     return profile.workAuthorization;
   }
+
+  // Everything else a pick-one question can ask is already described by the fill rules.
+  // Going through them means a question drawn as radios is answered from the same
+  // profile field as the same question drawn as a text input — relocation, work
+  // preference and the self-identification block are radios about as often as not.
+  const rule = buildRules(profile, '').find(
+    (candidate) =>
+      !candidate.longForm && !candidate.exclude?.test(label) && candidate.test.test(label),
+  );
+  if (rule) return rule.value;
+
   return matchScreeningAnswer(profile, label);
 }
 

@@ -7,7 +7,7 @@ import {
   pageLengthHint,
   polishStructuredResume,
 } from './resumeBuildRules';
-import { parseRoleHeading, stripBulletPrefix } from './resumeFormat';
+import { formatDateRange, parseRoleHeading, splitDateRange, stripBulletPrefix } from './resumeFormat';
 import type {
   AtsScore,
   EducationEntry,
@@ -16,6 +16,7 @@ import type {
   ProjectEntry,
   ResumeSection,
   SkillGroup,
+  StructuredResume,
   TailorOptions,
   TailorStats,
   TailoredResume,
@@ -26,7 +27,7 @@ const RULES = `Hard rules:
 - EXPERIENCE IS LOCKED FOR COUNT, COMPANY AND DATES:
   - Keep every work experience from the original resume. Same number of roles, same order
     (most recent first).
-  - Copy company, location and start-end dates EXACTLY from the LOCKED EXPERIENCE SKELETON. Do not merge,
+  - Copy company, location, startDate and endDate EXACTLY from the LOCKED EXPERIENCE SKELETON. Do not merge,
     drop, rename, invent or reorder employers, and do not change date ranges.
   - You MAY update the role title (positioning toward the target job) and rewrite bullet content.
 - Reproduce education and certifications fully - never drop them. A missing degree looks like a gap.
@@ -47,7 +48,8 @@ const DENSITY = `Density and structure (recruiters scan; do not dump everything)
 - Each project: 2-3 impactful bullets max.
 - Skills: group into categories such as Languages, Frontend, Backend, Cloud/DevOps, Databases,
   Testing, Tools. Put 4-8 items per group. Prefer the job's vocabulary where truthful.
-- Education: one compact entry per school (school, location, degree, year). Put coursework in
+- Education: one compact entry per school (school, location, degree, startDate, endDate). Most
+  resumes show only a completion year - put it in endDate and leave startDate "". Put coursework in
   details only if short; otherwise omit.
 - Certifications: a flat list of short strings, one credential per item.`;
 
@@ -74,16 +76,16 @@ Respond ONLY with JSON of the shape:
   "headline": string,
   "summary": string,
   "skillGroups": [{ "category": string, "items": string[] }],
-  "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }],
+  "experience": [{ "title": string, "company": string, "location": string, "startDate": string, "endDate": string, "bullets": string[] }],
   "projects": [{ "name": string, "tech": string, "bullets": string[] }],
-  "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
+  "education": [{ "school": string, "location": string, "degree": string, "startDate": string, "endDate": string, "details": string[] }],
   "certifications": string[],
   "addedKeywords": string[],
   "omittedKeywords": [{ "keyword": string, "reason": string }],
   "changeNotes": string[]
 }
 The experience array MUST have the same length and order as the LOCKED EXPERIENCE SKELETON, with
-identical company, location and dates fields. summary is 2-3 sentences that open with the target role and real
+identical company, location, startDate and endDate fields. summary is 2-3 sentences that open with the target role and real
 years of experience, and stay consistent with the headline stack. Every target keyword must appear
 in either addedKeywords or omittedKeywords. changeNotes lists at most 6 short notes on what you
 changed.`;
@@ -104,25 +106,27 @@ Respond ONLY with JSON of the same shape you were given:
   "headline": string,
   "summary": string,
   "skillGroups": [{ "category": string, "items": string[] }],
-  "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }],
+  "experience": [{ "title": string, "company": string, "location": string, "startDate": string, "endDate": string, "bullets": string[] }],
   "projects": [{ "name": string, "tech": string, "bullets": string[] }],
-  "education": [{ "school": string, "location": string, "degree": string, "year": string, "details": string[] }],
+  "education": [{ "school": string, "location": string, "degree": string, "startDate": string, "endDate": string, "details": string[] }],
   "certifications": string[],
   "addedKeywords": string[],
   "omittedKeywords": [{ "keyword": string, "reason": string }],
   "changeNotes": string[]
 }
-Preserve every experience entry with the same company, location and dates. changeNotes should describe only
+Preserve every experience entry with the same company, location, startDate and endDate. changeNotes should describe only
 what this instruction changed.`;
 
 const EXTRACT_EXPERIENCE_PROMPT = `Extract every paid work experience from this resume, most recent first.
 Do not invent roles. Copy company names, locations and date ranges exactly as written.
 location is the city/state the role was based in, or "" when the resume does not say.
+Split each date range into halves, keeping the resume's own wording: "June 2022 - Present" becomes
+startDate "June 2022" and endDate "Present". A role still held ends with "Present".
 Respond ONLY with JSON:
-{ "experience": [{ "title": string, "company": string, "location": string, "dates": string, "bullets": string[] }] }
+{ "experience": [{ "title": string, "company": string, "location": string, "startDate": string, "endDate": string, "bullets": string[] }] }
 Include the original bullets (without leading bullet markers). If a field is missing, use "".`;
 
-interface RawTailored {
+export interface RawTailored {
   headline?: unknown;
   summary?: unknown;
   skillGroups?: unknown;
@@ -141,6 +145,11 @@ export interface TailorRequest {
   apiKey: string;
   model: string;
   resumeText: string;
+  /**
+   * The base resume already parsed into fields. When present its experience is used as
+   * the locked skeleton, which saves the extraction round-trip on every tailor.
+   */
+  baseData?: StructuredResume;
   job: JobPosting;
   baseScore?: AtsScore;
   options: TailorOptions;
@@ -150,11 +159,13 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
   const targets = request.options.selectedKeywords.map((item) => item.trim()).filter(Boolean);
   const { sections, workExperienceDepth } = request.options;
 
-  const skeleton = await extractExperienceSkeleton({
-    apiKey: request.apiKey,
-    model: request.model,
-    resumeText: request.resumeText,
-  });
+  const skeleton = request.baseData?.experience.length
+    ? request.baseData.experience
+    : await extractExperienceSkeleton({
+        apiKey: request.apiKey,
+        model: request.model,
+        resumeText: request.resumeText,
+      });
 
   const selectedSections = [
     sections.summary && 'Summary',
@@ -169,14 +180,15 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
   const lockedSkeleton = skeleton.length
     ? [
         '',
-        `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — copy company + location + dates exactly; keep this count and order):`,
+        `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — copy company + location + startDate + endDate exactly; keep this count and order):`,
         JSON.stringify(
           skeleton.map((role, index) => ({
             index: index + 1,
             title: role.title,
             company: role.company,
             location: role.location ?? '',
-            dates: role.dates,
+            startDate: role.startDate,
+            endDate: role.endDate,
             originalBulletCount: role.bullets.length,
             targetBulletRange:
               index === 0 ? '6-8' : index === 1 ? '5-6' : '3-4',
@@ -245,7 +257,8 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
           title: role.title,
           company: role.company,
           location: role.location ?? '',
-          dates: role.dates,
+          startDate: role.startDate,
+          endDate: role.endDate,
           bullets: role.bullets,
         }))
       : await extractExperienceSkeleton({
@@ -260,13 +273,14 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
     'INSTRUCTION FROM THE CANDIDATE:',
     request.instruction.trim(),
     '',
-    `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — keep company + location + dates exact):`,
+    `LOCKED EXPERIENCE SKELETON (${skeleton.length} roles — keep company + location + startDate + endDate exact):`,
     JSON.stringify(
       skeleton.map((role) => ({
         title: role.title,
         company: role.company,
         location: role.location ?? '',
-        dates: role.dates,
+        startDate: role.startDate,
+        endDate: role.endDate,
       })),
       null,
       2,
@@ -352,18 +366,6 @@ function buildTailored(raw: RawTailored, context: BuildContext): TailoredResume 
   };
 }
 
-export interface StructuredResume {
-  headline: string;
-  summary: string;
-  skillGroups: SkillGroup[];
-  skills: string[];
-  experience: ExperienceEntry[];
-  projects: ProjectEntry[];
-  education: EducationEntry[];
-  certifications: string[];
-  sections: ResumeSection[];
-}
-
 export function parseStructured(raw: RawTailored | TailoredResume): StructuredResume {
   const skillGroups = toSkillGroups(raw.skillGroups, (raw as RawTailored).skills);
   const experience = toExperience((raw as RawTailored).experience);
@@ -441,7 +443,7 @@ export function renderResumeText(resume: {
       if (schoolLine) parts.push(schoolLine);
       const degreeLine = [
         [entry.degree, ...entry.details.map(stripBulletPrefix).filter(Boolean)].filter(Boolean).join(', '),
-        entry.year,
+        formatDateRange(entry.startDate, entry.endDate),
       ]
         .filter(Boolean)
         .join(' — ');
@@ -453,7 +455,9 @@ export function renderResumeText(resume: {
   if (resume.experience?.length) {
     parts.push('EXPERIENCE');
     for (const role of resume.experience) {
-      parts.push([role.title, role.dates].filter(Boolean).join(' — '));
+      parts.push(
+        [role.title, formatDateRange(role.startDate, role.endDate)].filter(Boolean).join(' — '),
+      );
       const companyLine = [role.company, role.location].filter(Boolean).join(' — ');
       if (companyLine) parts.push(companyLine);
       for (const bullet of role.bullets) parts.push(`- ${stripBulletPrefix(bullet)}`);
@@ -527,6 +531,22 @@ function readOmissionReasons(value: unknown): Map<string, string> {
   return reasons;
 }
 
+/**
+ * Reads a start/end pair, falling back to the single combined string that drafts stored
+ * before the split still carry. Explicit halves win, but only when one of them holds
+ * something: a model answering "" for both must not erase a legacy range.
+ */
+function readDateRange(
+  start: unknown,
+  end: unknown,
+  legacy: unknown,
+): { startDate: string; endDate: string } {
+  const startDate = typeof start === 'string' ? start.trim() : '';
+  const endDate = typeof end === 'string' ? end.trim() : '';
+  if (startDate || endDate) return { startDate, endDate };
+  return typeof legacy === 'string' ? splitDateRange(legacy) : { startDate: '', endDate: '' };
+}
+
 function toStringList(value: unknown, limit: number): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -563,16 +583,18 @@ function toExperience(value: unknown): ExperienceEntry[] {
       title?: unknown;
       company?: unknown;
       location?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
       dates?: unknown;
       bullets?: unknown;
     };
     const title = typeof entry.title === 'string' ? entry.title.trim() : '';
     const company = typeof entry.company === 'string' ? entry.company.trim() : '';
     const location = typeof entry.location === 'string' ? entry.location.trim() : '';
-    const dates = typeof entry.dates === 'string' ? entry.dates.trim() : '';
+    const { startDate, endDate } = readDateRange(entry.startDate, entry.endDate, entry.dates);
     const bullets = toStringList(entry.bullets, 12);
     if (!title && !company && !bullets.length) continue;
-    roles.push({ title: title || 'Role', company, location, dates, bullets });
+    roles.push({ title: title || 'Role', company, location, startDate, endDate, bullets });
   }
   return roles;
 }
@@ -620,7 +642,9 @@ export function reconcileExperience(
     const byCompany = unused.findIndex(
       (role) =>
         normalizeCompany(role.company) === normalizeCompany(original.company) ||
-        (original.dates && role.dates === original.dates),
+        ((original.startDate || original.endDate) &&
+          role.startDate === original.startDate &&
+          role.endDate === original.endDate),
     );
     const matchIndex = byCompany >= 0 ? byCompany : unused.length ? 0 : -1;
     const match = matchIndex >= 0 ? unused.splice(matchIndex, 1)[0] : undefined;
@@ -641,7 +665,8 @@ export function reconcileExperience(
       title: match?.title?.trim() || original.title,
       company: original.company,
       location: original.location ?? match?.location ?? '',
-      dates: original.dates,
+      startDate: original.startDate,
+      endDate: original.endDate,
       bullets,
     };
   });
@@ -680,16 +705,18 @@ function toEducation(value: unknown): EducationEntry[] {
       school?: unknown;
       location?: unknown;
       degree?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
       year?: unknown;
       details?: unknown;
     };
     const school = typeof entry.school === 'string' ? entry.school.trim() : '';
     const location = typeof entry.location === 'string' ? entry.location.trim() : '';
     const degree = typeof entry.degree === 'string' ? entry.degree.trim() : '';
-    const year = typeof entry.year === 'string' ? entry.year.trim() : '';
+    const { startDate, endDate } = readDateRange(entry.startDate, entry.endDate, entry.year);
     const details = toStringList(entry.details, 3);
     if (!school && !degree) continue;
-    entries.push({ school, location, degree, year, details });
+    entries.push({ school, location, degree, startDate, endDate, details });
   }
   return entries.slice(0, 4);
 }
@@ -740,7 +767,7 @@ function promoteLegacySections(
       experience.push({
         title: parsed.title,
         company: parsed.company,
-        dates: parsed.dates,
+        ...splitDateRange(parsed.dates),
         bullets: section.bullets.slice(0, 8),
       });
       continue;
@@ -754,7 +781,8 @@ function promoteLegacySections(
         school: section.heading,
         location: '',
         degree: section.bullets[0] ?? '',
-        year: '',
+        startDate: '',
+        endDate: '',
         details: section.bullets.slice(1, 3),
       });
       continue;

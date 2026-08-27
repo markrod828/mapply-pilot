@@ -1,26 +1,65 @@
+/** A tri-state answer: unset is meaningfully different from "no" on an application. */
+export type YesNo = 'yes' | 'no' | '';
+
 export interface ScreeningAnswer {
   id: string;
   question: string;
   answer: string;
 }
 
+/**
+ * A postal address as application forms ask for it: two street lines, then the
+ * administrative fields. Every part is free text — postal codes, regions and country
+ * naming vary too much between countries to constrain here.
+ */
+export interface Address {
+  line1: string;
+  /** Apartment, suite or unit. Usually blank. */
+  line2: string;
+  city: string;
+  /** State, province or region. */
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
 export interface Profile {
   firstName: string;
+  /** Required by several ATS platforms even though a resume rarely shows it. */
+  middleName: string;
   lastName: string;
+  /** e.g. "she/her". Asked by some forms; never rendered on the resume. */
+  pronouns: string;
   email: string;
   phone: string;
-  city: string;
-  state: string;
-  country: string;
+  address: Address;
+  /**
+   * Free text rather than a fixed set, because forms offer different options and most
+   * allow declining. Autofill matches it against a form's own choices, so whatever the
+   * candidate types here is what gets looked for.
+   */
+  gender: string;
+  /** Voluntary self-identification, same free-text reasoning as gender. */
+  ethnicity: string;
+  veteranStatus: string;
+  disabilityStatus: string;
   linkedin: string;
   github: string;
   portfolio: string;
   currentTitle: string;
   yearsExperience: string;
   workAuthorization: string;
-  requiresSponsorship: 'yes' | 'no' | '';
+  requiresSponsorship: YesNo;
   salaryExpectation: string;
   noticePeriod: string;
+  /** ISO 8601 (YYYY-MM-DD). Some forms want a date where others want a notice period. */
+  availableStartDate: string;
+  willingToRelocate: YesNo;
+  /** Remote, Hybrid, On-site. Free text, because forms word the choices differently. */
+  workPreference: string;
+  /** "How did you hear about us?" */
+  referralSource: string;
+  previouslyEmployed: YesNo;
   screeningAnswers: ScreeningAnswer[];
 }
 
@@ -28,6 +67,13 @@ export interface ResumeDoc {
   fileName: string;
   mimeType: string;
   text: string;
+  /**
+   * The resume parsed into fields, filled in lazily the first time there is an API key
+   * to do it with. Optional on purpose: `text` stays the source of truth, a re-upload
+   * writes a fresh doc without it, and every reader falls back to the text when absent.
+   */
+  data?: StructuredResume;
+  parsedAt?: number;
   /** Byte size of the stored original file, 0 when only text was provided. */
   size: number;
   updatedAt: number;
@@ -92,7 +138,13 @@ export interface ExperienceEntry {
   company: string;
   /** Optional. Rendered right-aligned opposite the company, as a classic resume does. */
   location?: string;
-  dates: string;
+  /**
+   * Kept as the resume wrote it, e.g. "June 2022" — not normalised, because a rewrite
+   * must never drift a date. Use formatDateRange to show the two together.
+   */
+  startDate: string;
+  /** e.g. "May 2022", or "Present" for a role still held. */
+  endDate: string;
   bullets: string[];
 }
 
@@ -107,11 +159,17 @@ export interface EducationEntry {
   school: string;
   location: string;
   degree: string;
-  year: string;
+  /** Often empty: most resumes show only the year a degree finished. */
+  startDate: string;
+  /** When the degree completed, e.g. "2019". */
+  endDate: string;
   details: string[];
 }
 
-/** Legacy free-form section used only when migrating older tailored drafts. */
+/**
+ * A section the structured shape does not model — awards, publications, target roles —
+ * plus the landing place when migrating older free-form drafts.
+ */
 export interface ResumeSection {
   heading: string;
   bullets: string[];
@@ -143,23 +201,31 @@ export interface TailorStats {
   skillsAdded: number;
 }
 
-export interface TailoredResume {
-  jobKey: string;
+/**
+ * A resume's content, independent of any job. The uploaded base resume and a tailored
+ * draft are both this shape; TailoredResume adds the target job and the provenance of
+ * the rewrite. Always produced by parseStructured, so every field is populated.
+ */
+export interface StructuredResume {
   /**
-   * Positioning line for the target role, e.g.
+   * Positioning line under the name, e.g.
    * "Full-Stack Engineer | React/TypeScript | Java/Spring Boot | AWS".
+   * Empty on most base resumes; a tailored draft aims it at the target role.
    */
   headline: string;
   summary: string;
   skillGroups: SkillGroup[];
-  /** Flattened skill list for keyword checks and autofill. */
+  /** Flattened from skillGroups for keyword checks and autofill. */
   skills: string[];
   experience: ExperienceEntry[];
   projects: ProjectEntry[];
   education: EducationEntry[];
   certifications: string[];
-  /** @deprecated Kept for migrating older drafts only. */
-  sections?: ResumeSection[];
+  sections: ResumeSection[];
+}
+
+export interface TailoredResume extends StructuredResume {
+  jobKey: string;
   changeNotes: string[];
   /** Requested keywords the rewrite actually worked into the resume. */
   addedKeywords: string[];
@@ -237,14 +303,27 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
 };
 
-export const EMPTY_PROFILE: Profile = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
+export const EMPTY_ADDRESS: Address = {
+  line1: '',
+  line2: '',
   city: '',
   state: '',
+  postalCode: '',
   country: '',
+};
+
+export const EMPTY_PROFILE: Profile = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  pronouns: '',
+  email: '',
+  phone: '',
+  address: EMPTY_ADDRESS,
+  gender: '',
+  ethnicity: '',
+  veteranStatus: '',
+  disabilityStatus: '',
   linkedin: '',
   github: '',
   portfolio: '',
@@ -254,5 +333,10 @@ export const EMPTY_PROFILE: Profile = {
   requiresSponsorship: '',
   salaryExpectation: '',
   noticePeriod: '',
+  availableStartDate: '',
+  willingToRelocate: '',
+  workPreference: '',
+  referralSource: '',
+  previouslyEmployed: '',
   screeningAnswers: [],
 };

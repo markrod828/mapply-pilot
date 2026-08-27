@@ -1,17 +1,29 @@
-import type { Profile } from '../../lib/types';
+import { formatAddress, formatLocation } from '../../lib/profile';
+import type { Address, Profile } from '../../lib/types';
 
-export type ValueKey =
-  | 'firstName'
-  | 'lastName'
-  | 'fullName'
-  | 'email'
-  | 'phone'
-  | 'linkedin'
-  | 'github'
-  | 'portfolio'
-  | 'city'
-  | 'location'
-  | 'currentTitle';
+/**
+ * Every profile field that holds a plain string. Derived rather than listed, so a new
+ * field is addressable by an adapter the moment it exists — the hand-written list this
+ * replaced had drifted several fields behind Profile.
+ */
+type ProfileValueKey = Exclude<keyof Profile, 'address' | 'screeningAnswers'>;
+
+/** Address parts, named the way the fill rules name them so both layers read alike. */
+const ADDRESS_KEYS = {
+  addressLine1: 'line1',
+  addressLine2: 'line2',
+  city: 'city',
+  state: 'state',
+  postalCode: 'postalCode',
+  country: 'country',
+} as const satisfies Record<string, keyof Address>;
+
+type AddressValueKey = keyof typeof ADDRESS_KEYS;
+
+/** Assembled from more than one field, for forms with a single combined box. */
+type ComputedValueKey = 'fullName' | 'location' | 'fullAddress';
+
+export type ValueKey = ProfileValueKey | AddressValueKey | ComputedValueKey;
 
 export interface AdapterField {
   selector: string;
@@ -85,8 +97,15 @@ export function resolveValue(profile: Profile, key: ValueKey): string {
     case 'fullName':
       return `${profile.firstName} ${profile.lastName}`.trim();
     case 'location':
-      return [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
+      return formatLocation(profile.address);
+    case 'fullAddress':
+      return formatAddress(profile.address);
     default:
-      return profile[key];
+      // `in` does not narrow a union of string literals, so the branch is proved by the
+      // lookup itself: anything in ADDRESS_KEYS is an address part, the rest is a
+      // profile field, and both halves of ValueKey are built from exactly those.
+      return key in ADDRESS_KEYS
+        ? profile.address[ADDRESS_KEYS[key as AddressValueKey]]
+        : profile[key as ProfileValueKey];
   }
 }
