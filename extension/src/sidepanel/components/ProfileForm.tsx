@@ -106,6 +106,20 @@ const SECTIONS: SectionSpec[] = [
         suggestions: ['LinkedIn', 'Company website', 'Indeed', 'Employee referral', 'Recruiter'],
       },
       { key: 'previouslyEmployed', label: 'Previously employed there', choices: YES_NO },
+      { key: 'isOver18', label: 'Are you 18 or older', choices: YES_NO },
+      { key: 'hasRelativesAtCompany', label: 'Relatives at the company', choices: YES_NO },
+      {
+        key: 'relativesDetail',
+        label: 'Relative names',
+        placeholder: 'N/A',
+        wide: true,
+      },
+      {
+        key: 'agreeToTerms',
+        label: 'Agree to privacy notices and terms',
+        choices: YES_NO,
+        wide: true,
+      },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { base64ToBlob } from '../../lib/db';
 import type { AnswersResponse, AutofillPayload, CoverLetterResponse } from '../../lib/messages';
 import { findAdapter, resolveValue } from './adapters';
 import { collectChoiceGroups } from './choices';
+import { fillEmploymentHistory } from './employment';
 import { isCombobox, selectComboboxOption, waitFor } from './combobox';
 import { collectQuestions } from './questions';
 import {
@@ -38,8 +39,8 @@ export interface AutofillResult {
 
 const YES_NO = /^(yes|no)$/i;
 
-export async function runAutofill(payload: AutofillPayload): Promise<AutofillResult> {
-  const result: AutofillResult = {
+function emptyResult(payload: AutofillPayload): AutofillResult {
+  return {
     filled: [],
     skipped: [],
     resumeAttached: false,
@@ -52,11 +53,94 @@ export async function runAutofill(payload: AutofillPayload): Promise<AutofillRes
       : undefined,
     adapter: findAdapter(location.hostname)?.name ?? 'Generic',
   };
+}
+
+/** How long the DOM must stop changing before a sweep is worth running. */
+const SETTLE_MS = 600;
+/** Bounded so a tab left open on a form does not observe forever. */
+const WATCH_MS = 10 * 60 * 1000;
+
+/**
+ * The deterministic passes on their own, safe to repeat.
+ *
+ * No model calls, so a sweep costs nothing and can never reword an answer that is
+ * already on the page. Anything holding a value is left alone, so this only ever
+ * fills what has newly appeared.
+ */
+async function fillKnownFields(payload: AutofillPayload): Promise<string[]> {
+  const result = emptyResult(payload);
+  const handled = new Set<Fillable>();
+
+  applyAdapter(payload, handled, result);
+  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled)));
+  await applyRules(payload, handled, result);
+  applyChoiceGroups(payload, result);
+  applyConsent(payload, handled, result);
+
+  return result.filled;
+}
+
+/**
+ * Keeps filling as the rest of the form arrives.
+ *
+ * A framework-rendered application is not one form but several: Workday and its peers
+ * are wizards whose steps each replace the DOM, and an answer often reveals the
+ * follow-up question underneath it. One pass can only ever see the step that was on
+ * screen when it ran, which is why the second step of an application always looked
+ * empty. This re-runs the free passes whenever the DOM settles.
+ *
+ * Returns a function that stops watching.
+ */
+export function watchForNewFields(
+  payload: AutofillPayload,
+  onFilled: (keys: string[]) => void,
+): () => void {
+  let timer: number | undefined;
+  let sweeping = false;
+  let stopped = false;
+
+  const stop = () => {
+    stopped = true;
+    observer.disconnect();
+    window.clearTimeout(timer);
+    window.clearTimeout(giveUp);
+  };
+
+  const sweep = async () => {
+    timer = undefined;
+    // Re-entrancy matters here: filling mutates the DOM, which wakes the observer.
+    if (stopped || sweeping) return;
+    sweeping = true;
+    try {
+      const filled = await fillKnownFields(payload);
+      if (filled.length && !stopped) onFilled(filled);
+    } finally {
+      sweeping = false;
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    if (stopped || timer !== undefined) return;
+    timer = window.setTimeout(sweep, SETTLE_MS);
+  });
+
+  // childList only: our own highlight writes inline styles, and watching attributes
+  // would make every fill wake the observer that caused it.
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const giveUp = window.setTimeout(stop, WATCH_MS);
+
+  return stop;
+}
+
+export async function runAutofill(payload: AutofillPayload): Promise<AutofillResult> {
+  const result = emptyResult(payload);
 
   const handled = new Set<Fillable>();
   applyAdapter(payload, handled, result);
+  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled)));
   await applyRules(payload, handled, result);
   applyChoiceGroups(payload, result);
+  applyConsent(payload, handled, result);
   await applyScreeningAnswers(payload, handled, result);
   await fillCoverLetter(payload, handled, result);
   attachResume(payload, result);
@@ -108,6 +192,38 @@ async function answerRemaining(handled: Set<Fillable>, result: AutofillResult) {
   }
 }
 
+const CONSENT =
+  /by (selecting|checking) agree|i (have read and )?agree|acknowledge that i have read|consent to|privacy (notice|policy)|terms (and conditions|of use)/;
+const CONSENT_NOT = /do not agree|disagree|opt out|unsubscribe|marketing|newsletter|promotional/;
+
+/**
+ * Lone tick-boxes: "I agree to the Privacy Notice".
+ *
+ * Nothing else reaches these. applyRules skips checkboxes outright, and the choice-group
+ * pass only handles pick-one questions, which needs two options. Gated on a stored
+ * choice rather than assumed, because ticking it is giving consent on someone's behalf,
+ * and deliberately blind to marketing opt-ins, which are not the same thing.
+ */
+function applyConsent(payload: AutofillPayload, handled: Set<Fillable>, result: AutofillResult) {
+  if (payload.profile.agreeToTerms !== 'yes') return;
+
+  for (const box of document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+    if (box.disabled || box.checked || handled.has(box)) continue;
+
+    // Styled forms hide the input behind its label, so either one being visible counts.
+    const label = box.closest('label');
+    if (!isVisible(box) && !(label && isVisible(label))) continue;
+
+    const text = describeField(box);
+    if (!CONSENT.test(text) || CONSENT_NOT.test(text)) continue;
+
+    box.click();
+    handled.add(box);
+    highlight(label ?? box, true);
+    result.filled.push('agreeToTerms');
+  }
+}
+
 function applyAdapter(payload: AutofillPayload, handled: Set<Fillable>, result: AutofillResult) {
   const adapter = findAdapter(location.hostname);
   if (!adapter) return;
@@ -133,6 +249,8 @@ async function applyRules(payload: AutofillPayload, handled: Set<Fillable>, resu
   for (const element of collectFields()) {
     if (handled.has(element) || hasValue(element)) continue;
     if (element instanceof HTMLInputElement && ['radio', 'checkbox', 'file'].includes(element.type)) continue;
+    // A sweep can land while the candidate is typing; never write over the caret.
+    if (element === document.activeElement) continue;
 
     const label = describeField(element);
     if (!label) continue;

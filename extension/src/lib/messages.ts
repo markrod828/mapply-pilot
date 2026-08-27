@@ -2,6 +2,7 @@ import type { FormQuestion, QuestionAnswer } from './questions';
 import type {
   AtsScore,
   CoverLetter,
+  ExperienceEntry,
   JobPosting,
   Profile,
   TailorOptions,
@@ -10,6 +11,12 @@ import type {
 
 export interface AutofillPayload {
   profile: Profile;
+  /**
+   * Work history for forms that ask for it row by row rather than as a resume file.
+   * From the tailored draft when there is one, else the parsed base resume; empty when
+   * the resume has not been parsed yet, which simply leaves those rows alone.
+   */
+  experience: ExperienceEntry[];
   resumeText: string;
   resumeFileName: string;
   /** base64 (no data: prefix) of the PDF to attach, when available. */

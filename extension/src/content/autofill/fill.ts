@@ -47,13 +47,21 @@ export function describeField(element: Fillable): string {
     }
   }
 
-  parts.push(
-    element.getAttribute('aria-label') ?? '',
-    (element as HTMLInputElement).placeholder ?? '',
+  parts.push(element.getAttribute('aria-label') ?? '', (element as HTMLInputElement).placeholder ?? '');
+
+  for (const identifier of [
     element.name ?? '',
     element.id ?? '',
     element.getAttribute('data-testid') ?? '',
-  );
+    // Workday names every field this way and often nothing else: its visible label is
+    // a plain <div>, while data-automation-id reads "legalNameSection_firstName".
+    element.getAttribute('data-automation-id') ?? '',
+  ]) {
+    if (!identifier) continue;
+    // Both spellings: rules anchored on a word boundary need the split form, and rules
+    // written against the run-together one ("linkedin") need the raw.
+    parts.push(identifier, identifierWords(identifier));
+  }
 
   const group = element.closest('div, fieldset, li');
   const groupLabel = group?.querySelector('label, legend');
@@ -67,6 +75,19 @@ export function describeField(element: Fillable): string {
     .toLowerCase();
 }
 
+/**
+ * Attribute values are identifiers rather than prose. Splitting them into words is what
+ * lets a rule anchored on a word boundary match: an underscore is a word character, so
+ * /\bcity\b/ never matches "addressSection_city" until it reads "address section city".
+ */
+function identifierWords(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function hasValue(element: Fillable): boolean {
   if (element instanceof HTMLSelectElement) {
     return element.selectedIndex > 0 && element.value !== '';
@@ -74,22 +95,94 @@ export function hasValue(element: Fillable): boolean {
   return element.value.trim() !== '';
 }
 
+/**
+ * Writes through the prototype's setter instead of assigning to the property.
+ *
+ * React installs its own `value` setter on each element to track changes. Assigning
+ * through that setter updates the tracker as well, so the `input` event that follows
+ * looks like a no-op and onChange never runs — the box shows the text while React's
+ * state stays empty, and the form reports the field as missing on submit. Writing
+ * through the prototype leaves the tracker stale, which is what makes React accept it.
+ */
+function writeValue(element: Fillable, value: string): void {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : element instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+
+  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+  if (setter) setter.call(element, value);
+  else element.value = value;
+}
+
+/**
+ * `element.focus()` and `.blur()` fire nothing when the document itself is not
+ * focused, which is often the case while autofill runs. Form libraries decide a field
+ * is "touched" from these events and only validate it then, so a field filled without
+ * them keeps its initial "required" error until the user clicks it by hand. React 17+
+ * listens for the bubbling focusin/focusout pair, so both are dispatched explicitly.
+ */
+function fireFocus(element: Fillable): void {
+  element.focus();
+  element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  element.dispatchEvent(new FocusEvent('focus'));
+}
+
+function fireBlur(element: Fillable): void {
+  element.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  element.dispatchEvent(new FocusEvent('blur'));
+  element.blur();
+}
+
+/**
+ * How many times a single field may be attempted before it is left alone.
+ *
+ * The watcher re-runs on every DOM change, so without a budget a field that will not
+ * take a value is retried for as long as the page stays open. That is worst on a
+ * combobox, where each failed attempt types, waits up to three seconds for a menu that
+ * never opens, then presses Escape — and on a framework that reverts what was written,
+ * where retrying makes the box visibly flicker between the two values.
+ */
+const MAX_ATTEMPTS = 3;
+
+/**
+ * Weakly keyed, so the budget is per element rather than per label: a wizard step that
+ * is routed away and back brings new nodes, and those start fresh.
+ */
+const attempts = new WeakMap<Element, number>();
+
+/** True once a field has been tried often enough to stop trying. */
+export function givenUpOn(element: Element): boolean {
+  return (attempts.get(element) ?? 0) >= MAX_ATTEMPTS;
+}
+
+/**
+ * Spends one of a field's attempts, returning false when there are none left.
+ *
+ * Attempts are counted rather than failures: a field that fills first time is never
+ * retried anyway, because every caller skips a field that already holds a value. So a
+ * second attempt only happens when the first did not survive, and three of those is
+ * enough to conclude the page does not want the value.
+ */
+export function claimAttempt(element: Element): boolean {
+  const used = attempts.get(element) ?? 0;
+  if (used >= MAX_ATTEMPTS) return false;
+  attempts.set(element, used + 1);
+  return true;
+}
+
 /** Sets a value the way React and friends notice: native setter, then input+change. */
 export function setValue(element: Fillable, value: string): boolean {
+  if (!claimAttempt(element)) return false;
   if (element instanceof HTMLSelectElement) return selectOption(element, value);
 
-  const prototype =
-    element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-  element.focus();
-  if (setter) {
-    setter.call(element, value);
-  } else {
-    element.value = value;
-  }
+  fireFocus(element);
+  writeValue(element, value);
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
-  element.blur();
+  fireBlur(element);
   return true;
 }
 
@@ -105,9 +198,14 @@ export function selectOption(element: HTMLSelectElement, value: string): boolean
     options.find((option) => wanted.includes(option.text.trim().toLowerCase()) && option.text.trim().length > 1);
 
   if (!match) return false;
-  element.value = match.value;
+
+  // Same tracker problem as a text input, and the same fix: a select assigned with
+  // `element.value = x` renders the choice but never reaches React's onChange.
+  fireFocus(element);
+  writeValue(element, match.value);
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
+  fireBlur(element);
   return true;
 }
 
@@ -118,6 +216,8 @@ export function attachFile(input: HTMLInputElement, file: File): boolean {
     input.files = transfer.files;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    // "Resume is required" is validated on blur as often as any other field.
+    fireBlur(input);
     return true;
   } catch {
     return false;

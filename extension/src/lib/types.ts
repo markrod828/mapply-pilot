@@ -60,6 +60,17 @@ export interface Profile {
   /** "How did you hear about us?" */
   referralSource: string;
   previouslyEmployed: YesNo;
+  /** Age eligibility, asked as "Are you 18 years of age or older?". */
+  isOver18: YesNo;
+  /** Nepotism disclosure: a relative already working at the company. */
+  hasRelativesAtCompany: YesNo;
+  /** Their names, or "N/A" — the follow-up box is usually required either way. */
+  relativesDetail: string;
+  /**
+   * Whether to tick "I agree to the Privacy Notice" and its equivalents. A consent,
+   * so it is a stored choice rather than something the filler assumes.
+   */
+  agreeToTerms: YesNo;
   screeningAnswers: ScreeningAnswer[];
 }
 
@@ -338,5 +349,9 @@ export const EMPTY_PROFILE: Profile = {
   workPreference: '',
   referralSource: '',
   previouslyEmployed: '',
+  isOver18: 'yes',
+  hasRelativesAtCompany: 'no',
+  relativesDetail: 'N/A',
+  agreeToTerms: 'yes',
   screeningAnswers: [],
 };

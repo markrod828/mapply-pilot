@@ -412,6 +412,7 @@ async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; pa
     ok: true,
     payload: {
       profile,
+      experience: tailored?.experience ?? resume?.data?.experience ?? [],
       // Kept in step with the attached file, so a form never gets tailored text
       // pasted next to the original PDF.
       resumeText: (usingTailored ? tailored?.text : resume?.text) ?? '',

@@ -2,6 +2,13 @@ import { collectFields } from './fill';
 
 /** Below this a page is a marketing or listing page, not something worth offering to fill. */
 const MIN_FIELDS = 3;
+/**
+ * Several ATSs - Workday among them - never emit a <form> element at all; they post
+ * over XHR. A form tag therefore cannot be a requirement. Without one the bar is
+ * higher, because a search page or a newsletter signup also has a couple of inputs,
+ * while a real application asks for name, contact and address at minimum.
+ */
+const MIN_FIELDS_WITHOUT_FORM = 6;
 const POLL_MS = 500;
 /**
  * Long, because these are SPAs: the user may read listings for a while before the
@@ -12,8 +19,11 @@ const GIVE_UP_MS = 5 * 60 * 1000;
 export function looksLikeApplicationForm(): boolean {
   // A resume upload is the strongest single signal an ATS form is on the page.
   if (document.querySelector('input[type="file"]')) return true;
-  if (!document.querySelector('form, [role="form"]')) return false;
-  return collectFields().length >= MIN_FIELDS;
+
+  const fields = collectFields().length;
+  return document.querySelector('form, [role="form"]')
+    ? fields >= MIN_FIELDS
+    : fields >= MIN_FIELDS_WITHOUT_FORM;
 }
 
 /**

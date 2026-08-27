@@ -28,7 +28,10 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
     {
       key: 'fullName',
       test: /(^|\b)(full[\s_-]*name|your name|name)(\b|$)/,
-      exclude: /first|last|user|company|employer|school|university|file|reference|manager/,
+      // Plenty of boxes ask for "name(s)" and mean somebody else's: a relative already
+      // at the company, an emergency contact, a referrer.
+      exclude:
+        /first|last|user|company|employer|school|university|file|reference|manager|relative|spouse|emergency|referr/,
       value: fullName,
     },
     { key: 'email', test: /e-?mail/, value: profile.email },
@@ -113,12 +116,14 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
     {
       key: 'availableStartDate',
       test: /available (start )?date|start date|when can you (start|begin)|earliest (start|availability)/,
-      exclude: /end date|employment/,
+      // A "Start date month" box belongs to an employment row, not to your availability.
+      exclude: /end date|employment|\bmonth\b|\byear\b|previous|prior|last job/,
       value: profile.availableStartDate,
     },
     {
       key: 'notice',
       test: /notice period|when can you start|start date|availability/,
+      exclude: /\bmonth\b|\byear\b|employment|end date/,
       value: profile.noticePeriod,
     },
     {
@@ -178,6 +183,30 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
       value: profile.previouslyEmployed,
     },
     {
+      key: 'over18',
+      test: /\b18\b.*(or older|or above|years of age)|at least 18|over 18|18\+/,
+      exclude: /under 18/,
+      value: profile.isOver18,
+    },
+    // The follow-up is tested first: it also says "relative(s)", and the first rule
+    // whose label matches wins.
+    {
+      key: 'relativesDetail',
+      test: /if you responded|name\(s\) of (known )?relative|names? of (the )?relatives?/,
+      value: profile.relativesDetail,
+    },
+    {
+      key: 'relativesAtCompany',
+      test: /relatives?\b.*(employed|work)|family member.*(employed|work)|any relatives? (at|with)/,
+      value: profile.hasRelativesAtCompany,
+    },
+    {
+      key: 'agreeToTerms',
+      test: /by (selecting|checking) agree|i (have read and )?agree to|acknowledge that i have read|privacy (notice|policy)|terms (and conditions|of use)/,
+      exclude: /do not agree|disagree/,
+      value: profile.agreeToTerms,
+    },
+    {
       key: 'pronouns',
       test: /pronoun/,
       value: profile.pronouns,
@@ -190,7 +219,10 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
     },
   ];
 
-  return rules.filter((rule) => rule.value.trim() !== '');
+  // Tolerant of a missing value despite the types: a profile stored before a field
+  // existed is untyped JSON by the time it gets here, and one undefined field must not
+  // take the whole form down with it.
+  return rules.filter((rule) => (rule.value ?? '').trim() !== '');
 }
 
 /** Finds a saved screening answer whose question overlaps the field label. */

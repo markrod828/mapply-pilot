@@ -1,5 +1,5 @@
 import type { AutofillResponse } from '../../lib/messages';
-import { runAutofill, type AutofillResult } from './engine';
+import { runAutofill, watchForNewFields, type AutofillResult } from './engine';
 
 const STYLE = `
 :host { all: initial; }
@@ -132,6 +132,10 @@ button:focus-visible {
 `;
 
 let mounted = false;
+/** Stops the sweep that keeps filling later wizard steps. Null when nothing is watching. */
+let stopWatching: (() => void) | null = null;
+/** Set while the panel is up, so a later sweep has somewhere to report. */
+let showProgress: ((html: string) => void) | null = null;
 
 export function startAutofillUi(): void {
   if (mounted) return;
@@ -166,6 +170,10 @@ export function startAutofillUi(): void {
   close.setAttribute('aria-label', 'Hide ApplyPilot');
   close.addEventListener('click', () => {
     host.remove();
+    // Closing the panel is also how you say "stop touching this form".
+    stopWatching?.();
+    stopWatching = null;
+    showProgress = null;
     // Allow it back when autofill is asked for again.
     mounted = false;
   });
@@ -192,6 +200,10 @@ export function startAutofillUi(): void {
       button.disabled = false;
     }
   });
+
+  showProgress = (html: string) => {
+    status.innerHTML = html;
+  };
 
   const body = document.createElement('div');
   body.className = 'body';
@@ -308,7 +320,24 @@ export async function autofillNow(): Promise<AutofillResult> {
   if (!response?.ok || !response.payload) {
     throw new Error(response?.error ?? 'ApplyPilot could not load your profile.');
   }
-  return runAutofill(response.payload);
+
+  const payload = response.payload;
+  const result = await runAutofill(payload);
+
+  /*
+   * The rest of the application arrives after this pass: a wizard routes in its next
+   * step, an answer reveals the question under it. Watching starts only here, once
+   * filling has been asked for, so the extension never types into a form on its own.
+   */
+  stopWatching?.();
+  stopWatching = watchForNewFields(payload, (keys) => {
+    showProgress?.(
+      `<strong>${keys.length}</strong> more field(s) filled as the form continued. ` +
+        'Review every field before you submit.',
+    );
+  });
+
+  return result;
 }
 
 function renderResult(result: AutofillResult): string {

@@ -1,4 +1,4 @@
-import { isVisible } from './fill';
+import { claimAttempt, isVisible } from './fill';
 
 /**
  * Driving react-select and friends. These render a text input plus a menu built on
@@ -33,6 +33,9 @@ export async function selectComboboxOption(
 ): Promise<boolean> {
   const wanted = value.trim().toLowerCase();
   if (!wanted) return false;
+  // Counted here rather than at the call sites, so no caller can spend the budget twice
+  // or forget it. A combobox is the most expensive thing to retry on the page.
+  if (!claimAttempt(input)) return false;
 
   input.focus();
   // Opens the menu even when typing alone would not.
