@@ -47,6 +47,11 @@ const SECTIONS: SectionSpec[] = [
       { key: 'pronouns', label: 'Pronouns', placeholder: 'Optional', suggestions: ['she/her', 'he/him', 'they/them'] },
       { key: 'email', label: 'Email' },
       { key: 'phone', label: 'Phone' },
+      {
+        key: 'preferredContact',
+        label: 'Preferred contact method',
+        suggestions: ['Email', 'Phone', 'Text message', 'LinkedIn'],
+      },
     ],
   },
   {

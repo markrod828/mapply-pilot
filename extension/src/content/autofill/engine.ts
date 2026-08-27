@@ -9,10 +9,13 @@ import {
   attachFile,
   collectFields,
   describeField,
+  resetFillMemory,
   hasValue,
   highlight,
   isVisible,
+  markTouched,
   setValue,
+  wasTouched,
   type Fillable,
 } from './fill';
 import { buildRules, matchScreeningAnswer } from './rules';
@@ -134,6 +137,9 @@ export function watchForNewFields(
 
 export async function runAutofill(payload: AutofillPayload): Promise<AutofillResult> {
   const result = emptyResult(payload);
+  // Pressing Autofill means "fill this form", including anything cleared since the
+  // last press and anything that failed. Only the automatic sweeps have to hold back.
+  resetFillMemory();
 
   const handled = new Set<Fillable>();
   applyAdapter(payload, handled, result);
@@ -144,7 +150,7 @@ export async function runAutofill(payload: AutofillPayload): Promise<AutofillRes
   await applyScreeningAnswers(payload, handled, result);
   await fillCoverLetter(payload, handled, result);
   attachResume(payload, result);
-  await answerRemaining(handled, result);
+  await answerRemaining(payload, handled, result);
   collectUnfilled(handled, result);
 
   return result;
@@ -154,7 +160,15 @@ export async function runAutofill(payload: AutofillPayload): Promise<AutofillRes
  * Whatever is still empty and reads like a question gets answered from the resume.
  * Runs last, so it only ever sees what the deterministic passes could not fill.
  */
-async function answerRemaining(handled: Set<Fillable>, result: AutofillResult) {
+async function answerRemaining(
+  payload: AutofillPayload,
+  handled: Set<Fillable>,
+  result: AutofillResult,
+) {
+  // Checked before collecting rather than after: collectQuestions opens every
+  // unanswered picker to read its options, which is the slowest thing autofill does.
+  if (!payload.answerQuestions) return;
+
   const questions = await collectQuestions(handled);
   if (!questions.length) return;
 
@@ -208,7 +222,7 @@ function applyConsent(payload: AutofillPayload, handled: Set<Fillable>, result: 
   if (payload.profile.agreeToTerms !== 'yes') return;
 
   for (const box of document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
-    if (box.disabled || box.checked || handled.has(box)) continue;
+    if (box.disabled || box.checked || handled.has(box) || wasTouched(box)) continue;
 
     // Styled forms hide the input behind its label, so either one being visible counts.
     const label = box.closest('label');
@@ -219,6 +233,7 @@ function applyConsent(payload: AutofillPayload, handled: Set<Fillable>, result: 
 
     box.click();
     handled.add(box);
+    markTouched(box);
     highlight(label ?? box, true);
     result.filled.push('agreeToTerms');
   }
@@ -230,7 +245,8 @@ function applyAdapter(payload: AutofillPayload, handled: Set<Fillable>, result: 
 
   for (const field of adapter.fields) {
     const element = document.querySelector<Fillable>(field.selector);
-    if (!element || handled.has(element) || !isVisible(element) || hasValue(element)) continue;
+    if (!element || handled.has(element) || wasTouched(element)) continue;
+    if (!isVisible(element) || hasValue(element)) continue;
 
     const value = resolveValue(payload.profile, field.key);
     if (!value) continue;
@@ -247,7 +263,7 @@ async function applyRules(payload: AutofillPayload, handled: Set<Fillable>, resu
   const rules = buildRules(payload.profile, payload.resumeText);
 
   for (const element of collectFields()) {
-    if (handled.has(element) || hasValue(element)) continue;
+    if (handled.has(element) || hasValue(element) || wasTouched(element)) continue;
     if (element instanceof HTMLInputElement && ['radio', 'checkbox', 'file'].includes(element.type)) continue;
     // A sweep can land while the candidate is typing; never write over the caret.
     if (element === document.activeElement) continue;
@@ -287,11 +303,12 @@ async function applyRules(payload: AutofillPayload, handled: Set<Fillable>, resu
  */
 function applyChoiceGroups(payload: AutofillPayload, result: AutofillResult) {
   for (const group of collectChoiceGroups()) {
-    if (group.answered()) continue;
+    if (group.answered() || wasTouched(group.element)) continue;
 
     const answer = answerForGroup(payload, group.label);
     if (!answer || !group.choose(answer)) continue;
 
+    markTouched(group.element);
     highlight(group.element, true);
     result.filled.push(group.label.slice(0, 40));
   }
@@ -325,7 +342,7 @@ async function applyScreeningAnswers(
   result: AutofillResult,
 ) {
   for (const element of collectFields()) {
-    if (handled.has(element) || hasValue(element)) continue;
+    if (handled.has(element) || hasValue(element) || wasTouched(element)) continue;
     if (element instanceof HTMLInputElement && ['radio', 'checkbox', 'file'].includes(element.type)) continue;
 
     const label = describeField(element);

@@ -1,7 +1,17 @@
 import { isCurrentRole, monthFromLabel, monthOptions, parseMonthYear } from '../../lib/resumeFormat';
 import type { ExperienceEntry } from '../../lib/types';
 import { waitFor } from './combobox';
-import { collectFields, describeField, hasValue, highlight, isVisible, setValue, type Fillable } from './fill';
+import {
+  collectFields,
+  describeField,
+  hasValue,
+  highlight,
+  isVisible,
+  markTouched,
+  setValue,
+  wasTouched,
+  type Fillable,
+} from './fill';
 
 /**
  * Employment history asked for row by row.
@@ -119,7 +129,7 @@ function findRows(): HTMLElement[] {
  * to read, so there the spellings are offered in turn until one lands.
  */
 function fillMonth(field: Fillable | undefined, month: number | null): boolean {
-  if (!field || month === null || hasValue(field)) return false;
+  if (!field || month === null || hasValue(field) || wasTouched(field)) return false;
 
   if (field instanceof HTMLSelectElement) {
     const match = Array.from(field.options).find(
@@ -132,7 +142,7 @@ function fillMonth(field: Fillable | undefined, month: number | null): boolean {
 }
 
 function fillText(field: Fillable | undefined, value: string): boolean {
-  if (!field || !value || hasValue(field)) return false;
+  if (!field || !value || hasValue(field) || wasTouched(field)) return false;
   return setValue(field, value);
 }
 
@@ -159,8 +169,9 @@ function fillRow(root: HTMLElement, role: ExperienceEntry, handled: Set<Fillable
   // A role still held has no end date to give: the form wants the checkbox instead,
   // and ticking it usually hides the end pickers altogether.
   if (isCurrentRole(role.endDate)) {
-    if (row.current && !row.current.checked) {
+    if (row.current && !row.current.checked && !wasTouched(row.current)) {
       row.current.click();
+      markTouched(row.current);
       highlight(row.current, true);
       filled.push('employer.currentRole');
     }

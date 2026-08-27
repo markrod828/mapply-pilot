@@ -32,6 +32,8 @@ export interface Profile {
   pronouns: string;
   email: string;
   phone: string;
+  /** How you would rather be reached: "Email", "Phone", "Text message". */
+  preferredContact: string;
   address: Address;
   /**
    * Free text rather than a fixed set, because forms offer different options and most
@@ -330,6 +332,7 @@ export const EMPTY_PROFILE: Profile = {
   pronouns: '',
   email: '',
   phone: '',
+  preferredContact: 'Email',
   address: EMPTY_ADDRESS,
   gender: '',
   ethnicity: '',

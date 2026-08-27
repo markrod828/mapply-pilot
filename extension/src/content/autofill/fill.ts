@@ -137,25 +137,62 @@ function fireBlur(element: Fillable): void {
 }
 
 /**
- * How many times a single field may be attempted before it is left alone.
+ * How many times a single field may be attempted per Autofill press.
  *
- * The watcher re-runs on every DOM change, so without a budget a field that will not
- * take a value is retried for as long as the page stays open. That is worst on a
- * combobox, where each failed attempt types, waits up to three seconds for a menu that
- * never opens, then presses Escape — and on a framework that reverts what was written,
- * where retrying makes the box visibly flicker between the two values.
+ * One. A field that did not take the value first time rarely takes it on the third
+ * either, and retrying is expensive: a failed combobox attempt types, waits up to three
+ * seconds for a menu that never opens, then presses Escape — and the watcher re-runs on
+ * every DOM change, so that cost repeats for as long as the page is open. Filling what
+ * can be filled quickly and leaving the rest to be typed by hand beats grinding.
  */
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 1;
 
 /**
  * Weakly keyed, so the budget is per element rather than per label: a wizard step that
  * is routed away and back brings new nodes, and those start fresh.
+ *
+ * Reassigned rather than cleared on a new run, which is the only way to empty a WeakMap.
  */
-const attempts = new WeakMap<Element, number>();
+let attempts = new WeakMap<Element, number>();
 
 /** True once a field has been tried often enough to stop trying. */
 export function givenUpOn(element: Element): boolean {
   return (attempts.get(element) ?? 0) >= MAX_ATTEMPTS;
+}
+
+/**
+ * Every control autofill has already put an answer into on this page.
+ *
+ * The background sweep re-runs on any DOM change, and clearing a field is itself a DOM
+ * change — so without this, deleting a wrong answer makes the sweep notice an empty
+ * field and put it straight back. That is the extension arguing with the person using
+ * it, and no attempt budget makes it acceptable; it just ends the argument after three
+ * rounds. So a sweep never touches a control twice, whatever it now contains.
+ *
+ * Pressing Autofill is a fresh instruction and forgets all of this, which is how you
+ * ask for a field to be filled again after clearing it.
+ */
+const touched = new Set<Element>();
+
+export function markTouched(element: Element): void {
+  touched.add(element);
+}
+
+export function wasTouched(element: Element): boolean {
+  return touched.has(element);
+}
+
+/**
+ * Wipes both memories, so everything on the page is fair game again.
+ *
+ * Called when Autofill is pressed, and only then. That press is a fresh instruction:
+ * it should refill what was cleared and re-try what failed, because the alternative is
+ * a button that does nothing the second time you press it. The background sweeps share
+ * the run's budget instead, which is what stops them grinding on a stubborn field.
+ */
+export function resetFillMemory(): void {
+  touched.clear();
+  attempts = new WeakMap<Element, number>();
 }
 
 /**
@@ -183,6 +220,7 @@ export function setValue(element: Fillable, value: string): boolean {
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
   fireBlur(element);
+  markTouched(element);
   return true;
 }
 
@@ -206,6 +244,7 @@ export function selectOption(element: HTMLSelectElement, value: string): boolean
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
   fireBlur(element);
+  markTouched(element);
   return true;
 }
 

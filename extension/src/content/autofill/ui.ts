@@ -1,4 +1,5 @@
 import type { AutofillResponse } from '../../lib/messages';
+import { buildFieldReport } from './diagnose';
 import { runAutofill, watchForNewFields, type AutofillResult } from './engine';
 
 const STYLE = `
@@ -114,6 +115,19 @@ button:focus-visible {
   user-select: text;
 }
 .status strong { color: var(--text); font-weight: 650; }
+
+/* A quiet link, because this is for reporting a problem rather than applying. */
+.report {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--faint);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.report:hover { color: var(--muted); }
 /* Findings read as a list, not one run-on paragraph. */
 .line + .line { margin-top: 6px; }
 .foot {
@@ -205,9 +219,24 @@ export function startAutofillUi(): void {
     status.innerHTML = html;
   };
 
+  const report = document.createElement('button');
+  report.className = 'report';
+  report.textContent = 'Copy field report';
+  report.title = 'What ApplyPilot can see on this page, for reporting a form it fills badly';
+  report.addEventListener('click', async () => {
+    try {
+      const text = await describeThisPage();
+      await navigator.clipboard.writeText(text);
+      report.textContent = 'Copied — paste it into the bug report';
+    } catch {
+      // Clipboard access can be refused; the console is always available.
+      report.textContent = 'Copy blocked — printed to the console instead';
+    }
+  });
+
   const body = document.createElement('div');
   body.className = 'body';
-  body.append(button, status);
+  body.append(button, status, report);
 
   panel.append(header, body);
   shadow.append(style, panel);
@@ -338,6 +367,21 @@ export async function autofillNow(): Promise<AutofillResult> {
   });
 
   return result;
+}
+
+/**
+ * Reads the page the way the filler does and hands back the report, also printing it
+ * so it survives a refused clipboard.
+ */
+async function describeThisPage(): Promise<string> {
+  const response = (await chrome.runtime.sendMessage({ type: 'GET_AUTOFILL_PAYLOAD' })) as AutofillResponse;
+  if (!response?.ok || !response.payload) {
+    throw new Error(response?.error ?? 'ApplyPilot could not load your profile.');
+  }
+
+  const text = buildFieldReport(response.payload);
+  console.log(text);
+  return text;
 }
 
 function renderResult(result: AutofillResult): string {

@@ -27,6 +27,12 @@ export interface AutofillPayload {
   resumeLabel: string;
   /** A tailored draft exists for this job but has no stored PDF, so the default went up. */
   tailoredUnavailable: boolean;
+  /**
+   * Whether the model may answer screening questions. Sent to the page because
+   * gathering the questions is itself slow — every unanswered picker gets opened to
+   * read its options — and that is pure waste when the answer pass is switched off.
+   */
+  answerQuestions: boolean;
 }
 
 export type Message =

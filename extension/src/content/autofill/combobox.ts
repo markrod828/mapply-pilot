@@ -1,4 +1,4 @@
-import { claimAttempt, isVisible } from './fill';
+import { claimAttempt, isVisible, markTouched } from './fill';
 
 /**
  * Driving react-select and friends. These render a text input plus a menu built on
@@ -6,7 +6,21 @@ import { claimAttempt, isVisible } from './fill';
  * still submits empty. The option has to be opened, filtered and clicked.
  */
 
-const OPTION_TIMEOUT_MS = 3000;
+/**
+ * Waiting for a menu to open, when a value is actually being committed. Generous
+ * because these options are sometimes fetched from a server on first keystroke.
+ */
+const OPTION_TIMEOUT_MS = 2500;
+
+/**
+ * Waiting for a menu that is only being read, to learn what a question offers.
+ *
+ * Much shorter, because this cost is paid on every unanswered picker on the page,
+ * one after another, and a menu that has not rendered in a second is not going to.
+ * At the old shared three seconds a form with three custom pickers spent nine
+ * seconds opening menus before anything else could happen.
+ */
+const PROBE_TIMEOUT_MS = 1000;
 const POLL_MS = 60;
 const SETTLE_MS = 80;
 
@@ -61,7 +75,9 @@ export async function selectComboboxOption(
 
   const chosen = label(match);
   click(match);
-  return committed(input, chosen);
+  if (!(await committed(input, chosen))) return false;
+  markTouched(input);
+  return true;
 }
 
 function label(option: HTMLElement): string {
@@ -87,9 +103,9 @@ function click(option: HTMLElement): void {
   }
 }
 
-async function waitForOptions(input: HTMLInputElement): Promise<HTMLElement[]> {
+async function waitForOptions(input: HTMLInputElement, timeoutMs = OPTION_TIMEOUT_MS): Promise<HTMLElement[]> {
   const scope = input.closest('[class*="select" i]');
-  const deadline = Date.now() + OPTION_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     // Menus usually render inside the control, but can be portalled to the body.
@@ -126,7 +142,7 @@ export async function readComboboxOptions(input: HTMLInputElement): Promise<stri
   input.focus();
   press(input, 'ArrowDown');
 
-  const options = await waitForOptions(input);
+  const options = await waitForOptions(input, PROBE_TIMEOUT_MS);
   const labels = options.map((option) => (option.textContent ?? '').replace(/\s+/g, ' ').trim());
 
   press(input, 'Escape');

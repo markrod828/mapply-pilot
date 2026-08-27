@@ -381,6 +381,7 @@ async function runAnswers(questions: FormQuestion[]) {
 }
 
 async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; payload?: AutofillPayload }> {
+  const settings = await getSettings();
   const profile = await getProfile();
   const resume = await getResume();
   const record = await getActiveJob();
@@ -424,6 +425,7 @@ async function buildAutofillPayload(): Promise<{ ok: boolean; error?: string; pa
         ? `tailored resume for ${record?.job.title || 'this job'}`
         : `your default resume${resume?.fileName ? ` (${resume.fileName})` : ''}`,
       tailoredUnavailable,
+      answerQuestions: settings.answerQuestions && Boolean(settings.openaiApiKey),
     },
   };
 }

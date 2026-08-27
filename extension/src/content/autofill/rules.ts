@@ -28,11 +28,23 @@ export function buildRules(profile: Profile, resumeText: string): FieldRule[] {
     {
       key: 'fullName',
       test: /(^|\b)(full[\s_-]*name|your name|name)(\b|$)/,
-      // Plenty of boxes ask for "name(s)" and mean somebody else's: a relative already
-      // at the company, an emergency contact, a referrer.
+      // Plenty of boxes say "name" and mean something narrower: one part of the name,
+      // or somebody else's entirely — a relative at the company, an emergency contact,
+      // a referrer. Each part is listed because its own rule drops out when that part
+      // of the profile is blank, leaving this rule to claim the box by default.
       exclude:
-        /first|last|user|company|employer|school|university|file|reference|manager|relative|spouse|emergency|referr/,
+        /first|middle|last|maiden|user|company|employer|school|university|file|reference|manager|relative|spouse|emergency|referr/,
       value: fullName,
+    },
+    {
+      key: 'preferredContact',
+      // Ahead of the email and phone rules on purpose: a label like "Preferred contact
+      // method (email or phone)" names both, and it wants the choice between them, not
+      // the address itself. "Preferred contact number" is excluded, since that is asking
+      // for the number and the phone rule below should answer it.
+      test: /preferred (method of )?contact|preferred contact|contact (method|preference)|best way to (reach|contact)|how (should|do) (we|you) (prefer to )?(contact|reach)/,
+      exclude: /contact number|contact phone|emergency/,
+      value: profile.preferredContact,
     },
     { key: 'email', test: /e-?mail/, value: profile.email },
     { key: 'phone', test: /phone|mobile|contact number|telephone/, value: profile.phone },
