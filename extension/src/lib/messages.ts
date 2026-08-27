@@ -1,4 +1,4 @@
-import type { FormQuestion, QuestionAnswer } from './questions';
+import type { FormQuestion, QuestionAnswer } from '@mapply/core/questions';
 import type {
   AtsScore,
   CoverLetter,
@@ -7,7 +7,7 @@ import type {
   Profile,
   TailorOptions,
   TailoredResume,
-} from './types';
+} from '@mapply/core/types';
 
 export interface AutofillPayload {
   profile: Profile;

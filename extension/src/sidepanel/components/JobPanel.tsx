@@ -9,7 +9,7 @@ import {
   type ResumeDoc,
   type Settings,
   type TailorOptions,
-} from '../../lib/types';
+} from '@mapply/core/types';
 import { useAction } from '../hooks';
 import { AlignStep } from './AlignStep';
 import { CompareStep } from './CompareStep';

@@ -1,4 +1,4 @@
-import { chatJson } from './openai';
+import type { LlmPort } from './ports';
 import type { AtsScore, ComparisonRow, ComparisonStatus, JobPosting, ScoredKeyword } from './types';
 
 const SYSTEM_PROMPT = `You are an applicant tracking system (ATS) screening engine.
@@ -73,7 +73,7 @@ interface RawScore {
 }
 
 export interface ScoreRequest {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   resumeText: string;
   job: JobPosting;
@@ -93,8 +93,8 @@ export async function scoreResume(request: ScoreRequest): Promise<AtsScore> {
     truncate(request.resumeText, 12000),
   ].join('\n');
 
-  const raw = await chatJson<RawScore>({
-    apiKey: request.apiKey,
+  const raw = await request.llm.chatJson<RawScore>({
+    purpose: 'score',
     model: request.model,
     system: SYSTEM_PROMPT,
     user,

@@ -1,5 +1,5 @@
 import { truncate } from './atsScore';
-import { chatJson } from './openai';
+import type { LlmPort } from './ports';
 import { parseStructured, type RawTailored } from './tailor';
 import type { StructuredResume } from './types';
 
@@ -48,15 +48,15 @@ Respond ONLY with JSON:
  * null here costs one wasted round-trip and changes nothing else.
  */
 export async function parseResumeDocument(request: {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   resumeText: string;
 }): Promise<StructuredResume | null> {
-  if (!request.apiKey || !request.resumeText.trim()) return null;
+  if (!request.resumeText.trim()) return null;
 
   try {
-    const raw = await chatJson<RawTailored>({
-      apiKey: request.apiKey,
+    const raw = await request.llm.chatJson<RawTailored>({
+      purpose: 'parse_resume',
       model: request.model,
       system: PARSE_PROMPT,
       user: truncate(request.resumeText, 16000),

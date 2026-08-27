@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { TEMPLATES } from '../../lib/resumePdf';
+import { TEMPLATES } from '@mapply/core/resumePdf';
+import { exportIdentity } from '../../lib/exportIdentity';
 import { chooseSaveDirectory, clearSaveDirectory, supportsFolderPicker } from '../../lib/saveLocation';
 import { setSettings } from '../../lib/storage';
-import type { ResumeTemplate, Settings, Theme } from '../../lib/types';
+import type { ResumeTemplate, Settings, Theme } from '@mapply/core/types';
 import { useAction } from '../hooks';
 import { applyTheme } from '../theme';
 
@@ -18,6 +19,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
   const { pending, error, run } = useAction();
   const [draft, setDraft] = useState<Settings>(settings);
   const [saved, setSaved] = useState(false);
+  const [exported, setExported] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(settings);
@@ -204,6 +206,26 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
             This Chrome build cannot pick a folder, so resumes go to your Downloads folder.
           </p>
         )}
+      </div>
+
+      <div className="card stack">
+        <h2>Orchestrator</h2>
+        <p className="small muted" style={{ margin: '0 0 8px' }}>
+          Saves your profile and resume to a file the orchestrator can read, then run{' '}
+          <code>mapply import &lt;file&gt;</code>. It stays on this machine.
+        </p>
+        <button
+          className="secondary"
+          disabled={pending !== null}
+          onClick={() =>
+            void run('export', async () => {
+              setExported(await exportIdentity());
+            })
+          }
+        >
+          {pending === 'export' ? 'Exporting…' : 'Export for orchestrator'}
+        </button>
+        {exported && <p className="small muted" style={{ margin: '8px 0 0' }}>Saved {exported}.</p>}
       </div>
 
       {error && <div className="error">{error}</div>}

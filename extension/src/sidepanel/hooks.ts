@@ -6,7 +6,7 @@ import {
   getSettings,
   onStorageChanged,
 } from '../lib/storage';
-import type { JobRecord, Profile, ResumeDoc, Settings } from '../lib/types';
+import type { JobRecord, Profile, ResumeDoc, Settings } from '@mapply/core/types';
 
 export interface AppState {
   settings: Settings | null;

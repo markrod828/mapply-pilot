@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { keywordsByCategory } from '../../lib/atsScore';
-import type { AtsScore, TailorOptions, TailorSections } from '../../lib/types';
+import { keywordsByCategory } from '@mapply/core/atsScore';
+import type { AtsScore, TailorOptions, TailorSections } from '@mapply/core/types';
 
 const SECTION_LABELS: { key: keyof TailorSections; label: string; hint: string }[] = [
   { key: 'summary', label: 'Summary', hint: 'Rewrite the profile to target this role' },

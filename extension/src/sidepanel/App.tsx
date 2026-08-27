@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { setSettings } from '../lib/storage';
-import { EMPTY_PROFILE, DEFAULT_SETTINGS, type Theme } from '../lib/types';
+import { EMPTY_PROFILE, DEFAULT_SETTINGS, type Theme } from '@mapply/core/types';
 import { JobPanel } from './components/JobPanel';
 import { ProfileForm } from './components/ProfileForm';
 import { ResumePanel } from './components/ResumePanel';

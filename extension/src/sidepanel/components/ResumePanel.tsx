@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_RESUME_FILE, deleteFile, putFile } from '../../lib/db';
-import { extractResumeText } from '../../lib/pdfText';
+import { extractResumeText } from '@mapply/core/pdfText';
+import { loadPdfjs } from '../../lib/pdfjsLoader';
 import { setResume } from '../../lib/storage';
-import type { ResumeDoc } from '../../lib/types';
+import type { ResumeDoc } from '@mapply/core/types';
 import { useAction } from '../hooks';
 
 const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -19,7 +20,7 @@ export function ResumePanel({ resume }: { resume: ResumeDoc | null }) {
 
   const onFile = (file: File) =>
     run('upload', async () => {
-      const extracted = await extractResumeText(file);
+      const extracted = await extractResumeText(file, loadPdfjs);
       setText(extracted);
       await putFile(DEFAULT_RESUME_FILE, file);
       await setResume({

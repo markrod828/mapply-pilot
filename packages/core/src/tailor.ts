@@ -1,5 +1,5 @@
 import { truncate } from './atsScore';
-import { chatJson } from './openai';
+import type { LlmPort } from './ports';
 import {
   ACTION_VERBS,
   RESUME_BUILD_RULES,
@@ -142,7 +142,7 @@ export interface RawTailored {
 }
 
 export interface TailorRequest {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   resumeText: string;
   /**
@@ -162,7 +162,7 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
   const skeleton = request.baseData?.experience.length
     ? request.baseData.experience
     : await extractExperienceSkeleton({
-        apiKey: request.apiKey,
+        llm: request.llm,
         model: request.model,
         resumeText: request.resumeText,
       });
@@ -222,8 +222,8 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
     truncate(request.resumeText, 14000),
   ].join('\n');
 
-  const raw = await chatJson<RawTailored>({
-    apiKey: request.apiKey,
+  const raw = await request.llm.chatJson<RawTailored>({
+    purpose: 'tailor',
     model: request.model,
     system: SYSTEM_PROMPT,
     user,
@@ -242,7 +242,7 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
 }
 
 export interface RefineRequest {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   resumeText: string;
   job: JobPosting;
@@ -262,7 +262,7 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
           bullets: role.bullets,
         }))
       : await extractExperienceSkeleton({
-          apiKey: request.apiKey,
+          llm: request.llm,
           model: request.model,
           resumeText: request.resumeText,
         });
@@ -305,8 +305,8 @@ export async function refineResume(request: RefineRequest): Promise<TailoredResu
     truncate(request.resumeText, 12000),
   ].join('\n');
 
-  const raw = await chatJson<RawTailored>({
-    apiKey: request.apiKey,
+  const raw = await request.llm.chatJson<RawTailored>({
+    purpose: 'refine',
     model: request.model,
     system: REFINE_PROMPT,
     user,
@@ -607,13 +607,13 @@ export function bulletCapForRole(index: number): number {
 }
 
 async function extractExperienceSkeleton(request: {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   resumeText: string;
 }): Promise<ExperienceEntry[]> {
   try {
-    const raw = await chatJson<{ experience?: unknown }>({
-      apiKey: request.apiKey,
+    const raw = await request.llm.chatJson<{ experience?: unknown }>({
+      purpose: 'extract_experience',
       model: request.model,
       system: EXTRACT_EXPERIENCE_PROMPT,
       user: truncate(request.resumeText, 14000),

@@ -1,5 +1,5 @@
 import { truncate } from './atsScore';
-import { chatJson } from './openai';
+import type { LlmPort } from './ports';
 import { formatLocation } from './profile';
 import type { JobPosting, Profile } from './types';
 
@@ -57,7 +57,7 @@ export interface QuestionAnswer {
 }
 
 export interface AnswerRequest {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   job: JobPosting;
   profile: Profile;
@@ -96,8 +96,8 @@ export async function answerFormQuestions(request: AnswerRequest): Promise<Quest
     ),
   ].join('\n');
 
-  const raw = await chatJson<{ answers?: unknown }>({
-    apiKey: request.apiKey,
+  const raw = await request.llm.chatJson<{ answers?: unknown }>({
+    purpose: 'answer',
     model: request.model,
     system: SYSTEM_PROMPT,
     user,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { setProfile } from '../../lib/storage';
-import type { Address, Profile, ScreeningAnswer } from '../../lib/types';
+import type { Address, Profile, ScreeningAnswer } from '@mapply/core/types';
 import { useAction } from '../hooks';
 
 /** Every profile key that holds a plain string, which is every field a section renders. */

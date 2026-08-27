@@ -1,5 +1,5 @@
-import { scoreVerdict } from '../../lib/atsScore';
-import type { AtsScore, ComparisonStatus, JobRecord } from '../../lib/types';
+import { scoreVerdict } from '@mapply/core/atsScore';
+import type { AtsScore, ComparisonStatus, JobRecord } from '@mapply/core/types';
 import { ScoreGauge } from './ScoreGauge';
 
 const STATUS_ICON: Record<ComparisonStatus, string> = {

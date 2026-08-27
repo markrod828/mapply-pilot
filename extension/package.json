@@ -12,7 +12,7 @@
     "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
-    "jspdf": "^2.5.2",
+    "@mapply/core": "*",
     "pdfjs-dist": "^4.7.76",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

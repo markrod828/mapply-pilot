@@ -1,0 +1,24 @@
+{
+  "name": "@mapply/filler",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The form engine: find fields, resolve values, write them, verify they stuck.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@mapply/core": "*",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

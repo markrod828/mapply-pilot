@@ -1,5 +1,5 @@
-import { formatAddress, formatLocation } from '../../lib/profile';
-import type { Profile } from '../../lib/types';
+import { formatAddress, formatLocation } from '@mapply/core/profile';
+import type { Profile } from '@mapply/core/types';
 
 export interface FieldRule {
   key: string;

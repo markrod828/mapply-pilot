@@ -1,7 +1,7 @@
 import { deleteRecord, getRecord, putRecord } from './db';
 import { downloadBlob } from './download';
-import { resumeSavePath } from './savePath';
-import type { JobPosting, Profile } from './types';
+import { resumeSavePath } from '@mapply/core/savePath';
+import type { JobPosting, Profile } from '@mapply/core/types';
 
 /**
  * Chrome's downloads API can only write inside the browser's download folder -

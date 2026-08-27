@@ -1,4 +1,4 @@
-import type { JobPosting } from '../lib/types';
+import type { JobPosting } from '@mapply/core/types';
 
 const SECTION_HINTS = /responsibilit|qualification|requirement|what you|about the role|benefits|experience/i;
 const MAX_DESCRIPTION = 20000;

@@ -1,7 +1,9 @@
-import { scoreResume } from '../lib/atsScore';
-import { generateCoverLetter } from '../lib/coverLetter';
+import { scoreResume } from '@mapply/core/atsScore';
+import { generateCoverLetter } from '@mapply/core/coverLetter';
 import { DEFAULT_RESUME_FILE, blobToBase64, getFile, tailoredResumeFile } from '../lib/db';
 import { hasHostAccess, originFor } from '../lib/hosts';
+import type { LlmPort } from '@mapply/core';
+import { llmFor } from '../lib/llm';
 import type { AutofillPayload, Message } from '../lib/messages';
 import {
   getActiveJob,
@@ -15,10 +17,10 @@ import {
   setResume,
   updateJob,
 } from '../lib/storage';
-import { answerFormQuestions, type FormQuestion, type QuestionAnswer } from '../lib/questions';
-import { parseResumeDocument } from '../lib/resumeParse';
-import { resumeFileName } from '../lib/resumePdf';
-import { refineResume, tailorResume } from '../lib/tailor';
+import { answerFormQuestions, type FormQuestion, type QuestionAnswer } from '@mapply/core/questions';
+import { parseResumeDocument } from '@mapply/core/resumeParse';
+import { resumeFileName } from '@mapply/core/resumePdf';
+import { refineResume, tailorResume } from '@mapply/core/tailor';
 import type {
   AtsScore,
   JobPosting,
@@ -26,7 +28,7 @@ import type {
   ResumeDoc,
   StructuredResume,
   TailorOptions,
-} from '../lib/types';
+} from '@mapply/core/types';
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
@@ -182,7 +184,7 @@ async function runScore(job: JobPosting, force: boolean, tabId?: number) {
 
   try {
     const score = await scoreResume({
-      apiKey: settings.openaiApiKey,
+      llm: llmFor(settings),
       model: settings.scoreModel,
       resumeText: resume.text,
       job,
@@ -209,12 +211,12 @@ async function runScore(job: JobPosting, force: boolean, tabId?: number) {
  */
 async function ensureResumeData(
   resume: ResumeDoc,
-  apiKey: string,
+  llm: LlmPort,
   model: string,
 ): Promise<StructuredResume | null> {
   if (resume.data) return resume.data;
 
-  const data = await parseResumeDocument({ apiKey, model, resumeText: resume.text });
+  const data = await parseResumeDocument({ llm, model, resumeText: resume.text });
   if (!data) return null;
 
   // The parse is slow enough that the resume may have been re-uploaded or edited while it
@@ -234,10 +236,10 @@ async function runTailor(jobKey: string, options: TailorOptions) {
   if (!resume?.text) return { ok: false, error: 'Upload your default resume first.' };
   if (!record) return { ok: false, error: 'That job is no longer cached. Reopen it on Jobright.' };
 
-  const baseData = await ensureResumeData(resume, settings.openaiApiKey, settings.tailorModel);
+  const baseData = await ensureResumeData(resume, llmFor(settings), settings.tailorModel);
 
   const tailored = await tailorResume({
-    apiKey: settings.openaiApiKey,
+    llm: llmFor(settings),
     model: settings.tailorModel,
     resumeText: resume.text,
     baseData: baseData ?? undefined,
@@ -279,7 +281,7 @@ async function writeCoverLetter(jobKey: string, resumeText: string) {
   if (!record) throw new Error('That job is no longer cached.');
 
   const coverLetter = await generateCoverLetter({
-    apiKey: settings.openaiApiKey,
+    llm: llmFor(settings),
     model: settings.tailorModel,
     job: record.job,
     profile,
@@ -298,7 +300,7 @@ async function runRefine(jobKey: string, instruction: string) {
   if (!record?.tailored) return { ok: false, error: 'Tailor the resume first.' };
 
   const tailored = await refineResume({
-    apiKey: settings.openaiApiKey,
+    llm: llmFor(settings),
     model: settings.tailorModel,
     resumeText: resume.text,
     job: record.job,
@@ -317,7 +319,7 @@ async function runTailoredScore(jobKey: string) {
   if (!record?.tailored) return { ok: false, error: 'Tailor the resume first.' };
 
   const score = await scoreResume({
-    apiKey: settings.openaiApiKey,
+    llm: llmFor(settings),
     model: settings.scoreModel,
     resumeText: record.tailored.text,
     job: record.job,
@@ -357,7 +359,7 @@ async function runAnswers(questions: FormQuestion[]) {
 
   if (unanswered.length) {
     const fresh = await answerFormQuestions({
-      apiKey: settings.openaiApiKey,
+      llm: llmFor(settings),
       model: settings.tailorModel,
       job: record.job,
       profile: await getProfile(),

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Senior Backend Engineer - Northwind Systems</title>
+<meta property="og:site_name" content="Northwind Systems">
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 620px; margin: 40px auto; padding: 0 20px; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; }
+  input[type=text], input[type=email], input[type=tel], select, textarea {
+    width: 100%; padding: 8px; box-sizing: border-box; }
+  /* Greenhouse hides the real file input behind a drop zone. Reproduced here on
+     purpose: it is the case a content script cannot reach and setInputFiles can. */
+  .dropzone { border: 2px dashed #999; padding: 20px; text-align: center; color: #666; }
+  .dropzone input[type=file] { display: none; }
+  fieldset { margin-top: 28px; }
+</style>
+</head>
+<body>
+<h1>Senior Backend Engineer</h1>
+<p class="location">Austin, TX</p>
+<p>Northwind Systems is hiring a senior backend engineer to work on distributed systems.</p>
+
+<form id="application_form" action="https://boards.greenhouse.io/northwind/applications" method="post">
+  <label for="first_name">First Name *</label>
+  <input type="text" id="first_name" name="first_name" required>
+
+  <label for="last_name">Last Name *</label>
+  <input type="text" id="last_name" name="last_name" required>
+
+  <label for="email">Email *</label>
+  <input type="email" id="email" name="email" required>
+
+  <label for="phone">Phone</label>
+  <input type="tel" id="phone" name="phone">
+
+  <label>Resume/CV *</label>
+  <div class="dropzone">
+    Drag and drop or
+    <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+  </div>
+
+  <label>Cover Letter</label>
+  <div class="dropzone">
+    <input type="file" id="cover_letter" name="cover_letter" accept=".pdf,.doc,.docx,.txt">
+  </div>
+
+  <div id="custom_fields">
+    <label for="question_1">Why do you want to work at Northwind Systems?</label>
+    <textarea id="question_1" name="question_1" rows="4"></textarea>
+  </div>
+
+  <fieldset id="demographic_questions">
+    <legend>Voluntary Self-Identification</legend>
+
+    <label for="gender">Gender</label>
+    <select id="gender" name="gender">
+      <option value="">Select...</option>
+      <option value="1">Male</option>
+      <option value="2">Female</option>
+      <option value="3">Decline To Self Identify</option>
+    </select>
+
+    <label for="veteran_status">Veteran Status</label>
+    <select id="veteran_status" name="veteran_status">
+      <option value="">Select...</option>
+      <option value="1">I am not a protected veteran</option>
+      <option value="2">I identify as one or more of the classifications of a protected veteran</option>
+      <option value="3">I don't wish to answer</option>
+    </select>
+
+    <label for="disability_status">Disability Status</label>
+    <select id="disability_status" name="disability_status">
+      <option value="">Select...</option>
+      <option value="1">Yes, I have a disability</option>
+      <option value="2">No, I do not have a disability</option>
+      <option value="3">I do not wish to answer</option>
+    </select>
+  </fieldset>
+
+  <p><button type="submit" id="submit_app">Submit Application</button></p>
+</form>
+</body>
+</html>

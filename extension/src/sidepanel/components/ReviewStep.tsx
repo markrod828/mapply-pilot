@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { sendMessage } from '../../lib/messages';
-import { buildResumeDiff } from '../../lib/resumeDiff';
-import { TEMPLATES, buildResumePdf } from '../../lib/resumePdf';
+import { buildResumeDiff } from '@mapply/core/resumeDiff';
+import { TEMPLATES, buildResumePdf } from '@mapply/core/resumePdf';
 import { saveResumePdf } from '../../lib/saveLocation';
 import { setSettings, updateJob } from '../../lib/storage';
 import { storeTailoredPdf } from '../../lib/tailoredFile';
-import { containsKeyword, renderResumeText } from '../../lib/tailor';
-import type { JobRecord, Profile, ResumeTemplate, Settings, TailoredResume } from '../../lib/types';
+import { containsKeyword, renderResumeText } from '@mapply/core/tailor';
+import type { JobRecord, Profile, ResumeTemplate, Settings, TailoredResume } from '@mapply/core/types';
 import { ResumePreview } from './ResumePreview';
 import { ScoreGauge } from './ScoreGauge';
 

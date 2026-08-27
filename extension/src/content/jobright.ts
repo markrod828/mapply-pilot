@@ -1,4 +1,4 @@
-import type { AtsScore, JobPosting } from '../lib/types';
+import type { AtsScore, JobPosting } from '@mapply/core/types';
 import { extractJob, jobInfoIdFromUrl } from './extract';
 import { mountOverlay, type OverlayHandle } from './overlay';
 

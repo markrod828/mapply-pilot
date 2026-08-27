@@ -1,0 +1,20 @@
+{
+  "name": "mapply-pilot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Automated job application pipeline: jobright discovery, ATS form filling, resume tailoring",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "extension"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}

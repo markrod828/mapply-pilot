@@ -1,4 +1,4 @@
-import type { Theme } from '../lib/types';
+import type { Theme } from '@mapply/core/types';
 
 /**
  * Mirrored outside chrome.storage because that read is async: the inline script in

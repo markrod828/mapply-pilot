@@ -1,7 +1,7 @@
 import { putFile, tailoredResumeFile } from './db';
-import { buildResumePdf } from './resumePdf';
-import { renderResumeText } from './tailor';
-import type { Profile, ResumeTemplate, TailoredResume } from './types';
+import { buildResumePdf } from '@mapply/core/resumePdf';
+import { renderResumeText } from '@mapply/core/tailor';
+import type { Profile, ResumeTemplate, TailoredResume } from '@mapply/core/types';
 
 /**
  * Render the draft and store it as the file autofill attaches for this job.

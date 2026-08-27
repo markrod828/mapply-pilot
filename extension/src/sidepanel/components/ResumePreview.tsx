@@ -1,9 +1,9 @@
 import { Fragment } from 'react';
-import type { DiffPart } from '../../lib/diffText';
-import { splitMetricParts } from '../../lib/resumeBuildRules';
-import { formatLocation } from '../../lib/profile';
-import { formatDateRange, stripBulletPrefix } from '../../lib/resumeFormat';
-import type { ResumeDiff } from '../../lib/resumeDiff';
+import type { DiffPart } from '@mapply/core/diffText';
+import { splitMetricParts } from '@mapply/core/resumeBuildRules';
+import { formatLocation } from '@mapply/core/profile';
+import { formatDateRange, stripBulletPrefix } from '@mapply/core/resumeFormat';
+import type { ResumeDiff } from '@mapply/core/resumeDiff';
 import type {
   EducationEntry,
   ExperienceEntry,
@@ -12,7 +12,7 @@ import type {
   ResumeSection,
   ResumeTemplate,
   SkillGroup,
-} from '../../lib/types';
+} from '@mapply/core/types';
 
 interface Props {
   profile: Profile;

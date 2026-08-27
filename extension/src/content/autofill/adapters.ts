@@ -1,5 +1,5 @@
-import { formatAddress, formatLocation } from '../../lib/profile';
-import type { Address, Profile } from '../../lib/types';
+import { formatAddress, formatLocation } from '@mapply/core/profile';
+import type { Address, Profile } from '@mapply/core/types';
 
 /**
  * Every profile field that holds a plain string. Derived rather than listed, so a new

@@ -7,9 +7,9 @@ import {
   type ResumeDoc,
   type Settings,
   type TailoredResume,
-} from './types';
-import { migrateProfile } from './profile';
-import { parseStructured, renderResumeText } from './tailor';
+} from '@mapply/core/types';
+import { migrateProfile } from '@mapply/core/profile';
+import { parseStructured, renderResumeText } from '@mapply/core/tailor';
 
 const KEYS = {
   settings: 'settings',

@@ -1,4 +1,4 @@
-import type { FormQuestion } from '../../lib/questions';
+import type { FormQuestion } from '@mapply/core/questions';
 import { collectChoiceGroups } from './choices';
 import { isCombobox, readComboboxOptions, selectComboboxOption } from './combobox';
 import { collectFields, describeField, hasValue, setValue, type Fillable } from './fill';

@@ -1,0 +1,26 @@
+{
+  "name": "@mapply/db",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SQLite persistence: jobs, applications, the answer bank and form templates.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@mapply/core": "*",
+    "better-sqlite3": "^11.5.0",
+    "kysely": "^0.27.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

@@ -3,3 +3,16 @@ dist/
 *.local
 .DS_Store
 .vite/
+
+# Orchestrator runtime state. Never commit and never sync to cloud storage:
+# artifacts/ holds full-page screenshots of submitted applications, which
+# contain address, phone and voluntary self-identification answers.
+data/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+
+# TypeScript project-reference build info
+*.tsbuildinfo

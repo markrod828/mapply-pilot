@@ -1,5 +1,5 @@
-import { isCurrentRole, monthFromLabel, monthOptions, parseMonthYear } from '../../lib/resumeFormat';
-import type { ExperienceEntry } from '../../lib/types';
+import { isCurrentRole, monthFromLabel, monthOptions, parseMonthYear } from '@mapply/core/resumeFormat';
+import type { ExperienceEntry } from '@mapply/core/types';
 import { waitFor } from './combobox';
 import {
   collectFields,

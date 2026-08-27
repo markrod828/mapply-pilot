@@ -1,5 +1,5 @@
 import { truncate } from './atsScore';
-import { chatText } from './openai';
+import type { LlmPort } from './ports';
 import type { CoverLetter, JobPosting, Profile } from './types';
 
 const SYSTEM_PROMPT = `You are an expert career coach and professional cover-letter writer.
@@ -125,7 +125,7 @@ not simply repeat the resume, the writing sounds natural and human, the letter i
 Provide only the finished cover letter, as plain text. No markdown, no preamble, no commentary.`;
 
 export interface CoverLetterRequest {
-  apiKey: string;
+  llm: LlmPort;
   model: string;
   job: JobPosting;
   profile: Profile;
@@ -155,8 +155,8 @@ export async function generateCoverLetter(request: CoverLetterRequest): Promise<
     additionalInformation(request.profile),
   ].join('\n');
 
-  const text = await chatText({
-    apiKey: request.apiKey,
+  const text = await request.llm.chatText({
+    purpose: 'cover_letter',
     model: request.model,
     system: SYSTEM_PROMPT,
     user,

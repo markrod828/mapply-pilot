@@ -1,4 +1,4 @@
-import { scoreVerdict } from '../../lib/atsScore';
+import { scoreVerdict } from '@mapply/core/atsScore';
 
 interface Props {
   score: number;

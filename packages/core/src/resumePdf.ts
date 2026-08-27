@@ -76,6 +76,26 @@ export async function buildResumePdf(
   resume: TailoredResume,
   template: ResumeTemplate = 'classic',
 ): Promise<Blob> {
+  return new Blob([await renderResumePdf(profile, resume, template)], { type: 'application/pdf' });
+}
+
+/**
+ * The same render as a byte array. The orchestrator writes these straight to
+ * disk, where a Blob would only be unwrapped again.
+ */
+export async function buildResumePdfBytes(
+  profile: Profile,
+  resume: TailoredResume,
+  template: ResumeTemplate = 'classic',
+): Promise<Uint8Array> {
+  return new Uint8Array(await renderResumePdf(profile, resume, template));
+}
+
+async function renderResumePdf(
+  profile: Profile,
+  resume: TailoredResume,
+  template: ResumeTemplate,
+): Promise<ArrayBuffer> {
   const { jsPDF } = await import('jspdf');
   const style = TEMPLATES[template].style;
 
@@ -381,7 +401,7 @@ export async function buildResumePdf(
     for (const bullet of section.bullets) writeBullet(bullet);
   }
 
-  return doc.output('blob');
+  return doc.output('arraybuffer');
 }
 
 export function resumeFileName(profile: Profile, company: string): string {
