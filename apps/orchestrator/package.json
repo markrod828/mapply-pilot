@@ -1,0 +1,28 @@
+{
+  "name": "@mapply/orchestrator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Playwright runner: fills and submits one application at a time.",
+  "bin": {
+    "mapply": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "mapply": "tsx src/cli.ts",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@mapply/core": "*",
+    "@mapply/db": "*",
+    "playwright": "^1.49.0",
+    "@mapply/discovery": "*",
+    "@mapply/filler": "*",
+    "@mapply/dashboard": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

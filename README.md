@@ -1,252 +1,146 @@
-# ApplyPilot
+# mapply
 
-A Chrome side-panel extension that assists job applications on [jobright.ai](https://jobright.ai):
+Applies to jobs, unattended, from a jobright feed.
 
-1. **ATS score** — open a job and ApplyPilot scores your default resume against it (0–100) with a
-   breakdown of keyword coverage, skills overlap, title/experience alignment and must-haves.
-2. **Tailored resume** — rewrite your resume toward that job description, edit the draft, accept it,
-   and see the new ATS score next to the original.
-3. **Autofill** — fill the application form on Greenhouse, Lever, Ashby (plus a generic fallback) with
-   your profile and the tailored resume, writing a cover letter and answering the screening
-   questions on the spot when the form asks for them.
+It reads a posting, scores your resume against it, rewrites the resume for the
+job when that is worth doing, fills the employer's application form, and submits
+it — stopping and asking only when it meets a question it cannot honestly answer.
 
-Nothing is submitted automatically. ApplyPilot fills fields and stops; you review and press submit.
+Everything runs on your own machine, in your own copy of Chrome. Nothing about
+your profile leaves it except the application itself.
 
-## Requirements
+---
 
-- Node.js 20+ (built and tested on Node 22)
-- Google Chrome 116+ (side panel API)
-- An OpenAI API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+## What it does, in order
 
-## Build and install
+```
+jobright  →  score  →  tailor  →  fill  →  verify  →  submit  →  confirm
+                ↓                    ↓                              ↓
+             skipped            needs_review                    submitted
+```
+
+An application only reaches `submitted` when at least **two independent signals**
+agree that the form actually arrived. Anything uncertain is parked for you rather
+than guessed at, and everything it could not fill is recorded on the application
+so nothing goes out silently incomplete.
+
+## Getting started
 
 ```bash
-cd extension
 npm install
-npm run build
+npx playwright install chromium      # optional: your installed Chrome is used first
 ```
 
-Then load it in Chrome:
+**1. Give it your details.** In the Chrome extension, *Settings → Export for
+orchestrator*, then:
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked** and select `extension/dist`
-4. Pin ApplyPilot and click the icon to open the side panel
-
-During development, `npm run dev` rebuilds the pages on change; re-run `npm run build` when you touch
-files under `src/content/` (content scripts are a separate bundle), and hit reload on the extensions
-page to pick up changes.
-
-## First-time setup
-
-In the side panel:
-
-- **Settings** — paste your OpenAI API key. Default models are `gpt-4o-mini` for scoring and `gpt-4o`
-  for tailoring. Leave "score automatically" on to score every job you open.
-- **Resume** — upload your default resume PDF. The text is extracted locally; correct any extraction
-  glitches in the text box, since that text is what gets scored and tailored. The original PDF stays
-  on your machine and is attached by autofill only when you have not tailored a version for the job
-  you are applying to.
-- **Profile** — contact details, links, work authorization and reusable screening answers.
-- **Settings → Appearance** — optional. The panel follows your computer's light or dark setting
-  unless you pick a side; the sun/moon button in the panel header flips it without leaving the tab.
-- **Settings → Where saved resumes go** — optional. By default a saved PDF lands in
-  `Downloads/resumes/{company}/{job title}/{your name}.pdf`. Pick a folder (Documents, say) to file
-  them there instead; see [Where resumes are saved](#where-resumes-are-saved).
-
-## Daily use
-
-1. Browse jobs on jobright.ai. Opening a posting shows an ATS score badge in the page corner and on
-   the toolbar icon.
-2. Click the badge to open the side panel: buckets, matched keywords, missing keywords and unmet
-   must-haves.
-3. Work the three-step tailoring wizard:
-   - **See your difference** — verdict, gauge, and a job-vs-resume table (job title, years of
-     experience, industry, education) plus the ATS keyword list showing matched vs missing.
-   - **Align your resume** — pick which sections to enhance (summary, skills, work experience with
-     quick or full depth, projects) and tick the missing keywords to add. Add your own keywords too.
-   - **Review your new resume** — before/after score, what changed, and three views of the draft:
-     **Preview** (formatted, with inserted keywords highlighted, plus the template switcher),
-     **Changes** (a line-by-line comparison against your original) and **Edit**. There is also a
-     "tweak with AI" box for follow-up instructions.
-   Then **Accept & re-score** to see what the rewrite did to your score. Autofill already
-   attaches the draft you are looking at, edits included — accepting is about the score, not
-   about making the resume uploadable.
-4. Open the application form. On Greenhouse, Lever, Ashby and Rippling a small **Autofill this
-   application** panel appears once the form itself is on the page. On any other site, use
-   **Autofill this page** in the side panel and allow the one-time Chrome permission prompt for
-   that host. Filled fields are outlined; still-required fields are listed. Drag the panel out of
-   the way if it sits over something you need — anywhere on it except its button and its result
-   text — or press × to hide it; where you leave it is remembered for the next form.
-5. Check every field, then submit yourself.
-
-## How it works
-
-```
-extension/
-  public/manifest.json      MV3 manifest
-  public/icons/             toolbar icons, generated by `npm run icons`
-  scripts/make-icons.mjs    dependency-free PNG icon generator
-  sidepanel.html            side panel entry
-  src/
-    background/             service worker: scoring, tailoring, autofill payloads, badges
-    content/
-      extract.ts            JSON-LD + DOM job description extraction
-      jobright.ts           SPA-aware job detection and score overlay
-      autofill/             field matching, site adapters, fill engine, in-page panel
-        detect.ts           waits for a real application form before offering to fill
-        choices.ts          pick-one questions: radios, ARIA widgets, button rows
-        combobox.ts         drives react-select style pickers
-    lib/                    types, storage, OpenAI client, ATS rubric, tailor prompt, PDF in/out
-      hosts.ts              per-site permission checks and prompts
-      diffText.ts           word-level LCS diff
-      resumeDiff.ts         pairs each rewritten line with the original it came from
-      savePath.ts           resumes/{company}/{job title}/{name}.pdf, sanitised
-      saveLocation.ts       chosen-folder writes, falling back to Downloads
-      coverLetter.ts        cover letter prompt and generation
-      questions.ts          answers screening questions from your resume
-    sidepanel/              React UI (Job, Resume, Profile, Settings tabs)
+```bash
+npx tsx apps/orchestrator/src/cli.ts import ~/Downloads/mapply-identity-*.json
+npx tsx apps/orchestrator/src/cli.ts whoami
 ```
 
-- Job data comes from the page you are already viewing (JSON-LD `JobPosting` when present, otherwise
-  the largest description-like block). No private Jobright APIs are called. Because Jobright is a
-  single-page app, two things are guarded: head tags (title, og:title, JSON-LD) are ignored when the
-  canonical URL still points at the posting you came from, and everything read out of the page comes
-  from inside the block the description came from, so the list you clicked through from — still
-  mounted behind the detail — cannot supply the title, company or location.
-- Applying usually redirects to the company's own form on another site. The tailored resume follows:
-  autofill attaches the draft stored for whichever job is currently open in the panel, and the panel
-  rewrites that PDF whenever the draft changes, so the file on the form matches what you last saw.
-- Scores are cached per job and per resume version, so reopening a job is instant and editing your
-  resume invalidates stale scores.
-- Scoring is calibrated to bands rather than left open-ended, so it does not drift optimistic, and
-  anything under 60 is flagged as likely to be filtered before a human reads it. Role fit is judged
-  on the work the resume describes rather than job-title strings, and only a genuinely unmet hard
-  requirement caps the score (at 55) — otherwise tailoring could never move the number.
-- The review step also shows keyword coverage as a plain before/after count, measured in code
-  against the same keyword list the original score used, so it is comparable even when the model's
-  own number moves around.
-- Tailoring is keyword-driven: you choose the target keywords, and each one is either worked into
-  the text (using the job's exact term in place of your weaker synonym) or reported as omitted with
-  a reason. Coverage is then re-checked in code against the draft you are reading, so the panel
-  reflects what was actually written rather than what the model claimed.
-- "What changed" counts are computed by diffing the draft against your original resume, not taken
-  from the model's self-report.
-- The cover letter is written during autofill, only once a form actually asks for one, from the
-  tailored resume plus the posting. It is held to the same rule as the rewrite: no invented
-  statistics, accomplishments, qualifications or personal connection to the company. It aims at
-  250–400 words in 3–5 paragraphs, opens with the position and your strongest relevant
-  qualification, and addresses "Dear Hiring Manager," rather than guessing a name. It is cached
-  against the job, and dropped when you re-tailor or refine the resume it was written from.
-- The **Changes** view compares the draft with your original resume in code, not by asking the model
-  what it did. Your original is plain text with no sections, so each new bullet is paired with the
-  line it most resembles and diffed word by word: new wording is green, wording it replaced is
-  struck through, and untouched text stays plain. Bullets with no counterpart show as entirely new,
-  and original bullets that survive nowhere are listed under the role they came from — a line that
-  merely moved (a role heading, your skills list, an education entry) is not reported as a cut.
-- The prompt forbids inventing employers, titles, dates, degrees or metrics, and sections you did
-  not select are reproduced verbatim. Keywords you tick are treated as true. Read the draft before
-  you accept it — you are responsible for every claim on your resume.
+**2. Turn on scoring and tailoring** (optional — without a key it sends your base
+resume unchanged):
 
-## Answered questions
-
-Autofill runs its deterministic passes first — site adapters, profile rules, radio groups, your
-saved answers, the cover letter and the file uploads. Whatever is still empty and reads like a
-question is then answered from your resume and the posting you have open, and written into the form
-**outlined amber** rather than green, because those answers need reading.
-
-Answers are grounded, not invented: the prompt forbids making up employers, titles, dates, degrees,
-metrics or years, and a question the resume gives no basis for is left blank for you. Answers to
-option pickers must be one of the offered options verbatim, and are discarded in code if they are
-not. Each answer is cached against the job, so re-running autofill on the same form costs nothing
-and does not reword itself.
-
-Two categories are never sent to the model:
-
-- **Personal facts** — name, contact details, location, salary, notice period, and work
-  authorization, visa sponsorship or citizenship. These come from your **Profile** or stay empty.
-  They are facts about you, not things to infer from a resume.
-- **Protected characteristics** — gender, race, ethnicity, veteran status, disability,
-  accommodations. Voluntary self-identification is yours to answer.
-
-If a question asks for your own words — "in your own words", "not AI" — it is still answered, but
-the panel names that field and tells you to rewrite it. Employers who ask this often weight the
-answer heavily, and it is usually the question worth writing yourself.
-
-## Where resumes are saved
-
-**Save PDF** files the resume as:
-
-```
-resumes/{company}/{job title}/{your full name}.pdf
+```bash
+export OPENAI_API_KEY=sk-...
 ```
 
-Illegal path characters are stripped from the company and title, long names are shortened, and
-empty ones become `Unknown company` / `Unknown role`. Saving the same job twice overwrites that
-file rather than piling up copies.
+**3. Sign in to jobright once**, in the browser profile the crawler uses. The
+crawl will tell you if the session has lapsed; it never attempts a login itself.
 
-By default this tree sits in your **Downloads** folder, because that is the only place a Chrome
-extension can write on its own — the downloads API rejects absolute paths and `..`, so
-`Documents/...` is out of reach through it.
+**4. Fill the queue and work it.**
 
-To keep resumes somewhere else, open **Settings → Where saved resumes go** and choose a folder. The
-picker opens at Documents, and choosing it gives you exactly
-`Documents/resumes/{company}/{job title}/{your name}.pdf`. Chrome remembers the grant, though it may
-ask you to confirm again after a restart; if the folder is unavailable, saving quietly falls back to
-Downloads and the panel tells you where the file went. Folder picking needs a Chrome build that
-supports the File System Access API — without it, saving always uses Downloads.
+```bash
+npx tsx apps/orchestrator/src/cli.ts crawl --limit 25
+npx tsx apps/orchestrator/src/cli.ts run --limit 10        # dry run
+npx tsx apps/orchestrator/src/cli.ts run --limit 10 --submit
+```
 
-## Resume templates
+**5. Clear what stopped.**
 
-Two templates are available from the review step or the Settings tab, and the choice applies to the
-PDF you download and the file autofill attaches:
+```bash
+npx tsx apps/orchestrator/src/cli.ts dashboard             # http://127.0.0.1:4600
+```
 
-- **Classic** — centred serif header with ruled section headings, for conservative industries.
-- **Modern** — left-aligned sans-serif with a coloured role headline, for tech and startups.
+## Commands
 
-Both are deliberately single-column with no tables, text boxes, columns or graphics, so a parser
-still reads them top to bottom. The preview mirrors the PDF layout, with:
+| | |
+|---|---|
+| `import <file>` | Load the profile and resume exported from the extension |
+| `whoami` | Show what it knows about you |
+| `crawl [--limit N]` | Read new jobs from jobright into the queue |
+| `run [--limit N] [--submit] [--budget $]` | Work the queue. Dry run unless `--submit` |
+| `apply --url <url> [--submit]` | Apply to one posting directly |
+| `questions` | What stopped applications, commonest first |
+| `answer "<question>" "<answer>"` | Teach it one, reused everywhere after |
+| `bank` | What it has been taught |
+| `status` · `recover` · `dashboard` | Recent applications · re-queue abandoned work · review UI |
 
-- job title / company / dates as a clear hierarchy
-- skills in labelled groups (Languages, Frontend, Backend, …)
-- stripped bullet markers so you never see `• • Designed…`
-- education as school + degree lines, and certifications as a compact single line
+## The answer bank
 
-The tailor prompt also follows recruiter best practices (easy scanning, accomplishment bullets with
-truthful metrics, strong action verbs, ≤18 believable skills, standard ATS section names, and
-one-page targets for early-career resumes) while preserving every original role: about 6–8 bullets
-for the most recent role, 5–6 for the second, and 3–4 for older ones. Company names and date ranges
-stay locked; only role titles and bullet content are rewritten. Measurable results from your original
-resume are visually emphasized in the preview.
+This is what makes it unattended. The first time a form asks something it cannot
+work out from your profile, it stops and records the question. You answer once —
+in the dashboard or with `mapply answer` — and every later form asking the same
+thing is filled without you.
 
-## Privacy
+It never invents an answer. In particular, any answer containing a **number about
+you** — years with a technology, salary, notice period — must come from your
+profile or from an answer you approved. An application is a document you are
+signing; a plausible guess on one is not a small thing.
 
-Your resume, profile and job history are stored locally (`chrome.storage.local` and IndexedDB). The
-only network calls ApplyPilot makes are to `api.openai.com` with your key, sent from the service
-worker so the key is never exposed to page scripts.
+## Safety
 
-## Limits
+The parts that exist because getting them wrong is expensive:
 
-- Jobright discovery only; other boards are not scanned.
-- Autofill adapters cover Greenhouse, Lever, Ashby and Rippling; other ATS forms use label
-  heuristics and will leave unusual fields blank. For unknown hosts, Chrome may prompt once to
-  grant site access before autofill can run.
-- File attachment works where the form uses a real `<input type="file">`; drag-and-drop-only widgets
-  need a manual upload.
-- The cover letter is pasted into a text box wherever the form offers one, since an ATS reads that
-  directly instead of parsing an attachment. Where a form hides the box behind an "Enter manually"
-  button, that button is pressed first. Only when there is no text option at all is the letter
-  uploaded, as a `.txt` file, and only where the upload accepts plain text.
-- Dropdowns built as custom widgets (react-select, which Greenhouse now uses for every Yes/No and
-  location field) are driven by opening the menu and clicking the matching option, then confirming
-  the control took it. A picker whose options do not contain your answer is left alone rather than
-  set to something close.
-- Pick-one questions are handled whichever way the form draws them: real radio inputs (usually
-  visually hidden behind a styled label), `role="radiogroup"` widgets, or a plain row of buttons —
-  Ashby draws Yes/No that way, with no input on the page at all. An option is only clicked when its
-  text matches the answer; nothing is picked on a guess.
-- Where a form offers to parse a resume into its fields ("Autofill from resume"), that uploader is
-  skipped so the resume lands in the actual resume field instead.
-- Screening questions still empty after all of that are answered from your resume for the job you
-  have open — see [Answered questions](#answered-questions). Turn it off in Settings.
-- No auto-submit, no CAPTCHA handling, no cloud sync.
+- **Dry run is the default.** `--submit` has to be asked for.
+- **Nothing is trusted after it is written.** Every field is read back, and the
+  whole form is re-read once more before submitting — because uploading a resume
+  makes some ATSs re-render and quietly empty fields that were correct a moment
+  earlier.
+- **Two signals to confirm.** A URL change, a "thank you", a 2xx/3xx on the POST,
+  the form disappearing — any one of them lies on its own.
+- **`submit_attempted_at` is written before the click.** If the process dies
+  mid-submit, recovery parks it for a person instead of trying again. Applying
+  twice reads as spam.
+- **One application per job, ever**, plus a content hash that recognises the same
+  role relisted under a new id.
+- **Waived, not ignored.** When a form says a field is optional in practice — as
+  Greenhouse does when its location service is down — that is recorded on the
+  application, not skipped silently.
+
+## Layout
+
+```
+packages/core         Resume tailoring, ATS scoring, screening answers. No platform APIs.
+packages/db           SQLite: jobs, applications, the answer bank, form templates.
+packages/filler       The form engine: find fields, resolve values, write, verify.
+packages/discovery    The jobright crawl and apply-link resolution.
+apps/orchestrator     The runner and CLI.
+apps/dashboard        The review queue.
+extension/            The original Chrome extension, kept for applying by hand.
+```
+
+`packages/core` compiles with no DOM or Chrome types on purpose — it is shared by
+the extension, the runner and the dashboard, and a platform call there would
+break one of them.
+
+## Tests
+
+```bash
+npm test --workspaces
+```
+
+The form engine is tested against saved fixtures in
+`packages/filler/test/fixtures`, including an embedded-iframe form and one with an
+unanswerable required question, so a change that breaks label attribution or the
+parking rules fails locally rather than on someone's real application.
+
+## What it does not do
+
+- **Sign in anywhere.** jobright is signed into by hand, once.
+- **Solve CAPTCHAs.** They park for you.
+- **Handle every ATS.** Greenhouse is templated; others fall back to the generic
+  engine and park more often. `mapply status` shows what came back
+  `unsupported_ats` — that is the list of what to template next.
+- **Answer for you.** It fills what it can prove; the rest is yours.

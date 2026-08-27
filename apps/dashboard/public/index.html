@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mapply — review</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%93%A8%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #fff; --ink: #16171a; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #2563eb; --warn: #b45309; --ok: #047857;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131417; --panel: #1b1d21; --ink: #e8e9ea; --muted: #9aa0a6;
+      --line: #2b2e33; --accent: #7aa2f7; --warn: #d99a3a; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 5;
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  nav button {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    padding: 5px 11px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 14px;
+  }
+  nav button[aria-current="true"] { color: var(--ink); border-color: var(--line); background: var(--bg); }
+  .stats { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-weight: 600; }
+  main { padding: 20px; max-width: 1500px; margin: 0 auto; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  .role { font-weight: 600; }
+  .co { color: var(--muted); }
+  .why { color: var(--warn); font-size: 13px; margin-top: 6px; }
+  .q label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .q .ask { color: var(--ink); font-size: 14px; }
+  .req { color: var(--warn); }
+  .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=text] {
+    flex: 1; min-width: 220px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit;
+  }
+  button.act {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); cursor: pointer; font: inherit; font-size: 14px;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.act:hover { border-color: var(--accent); }
+  .chip {
+    display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); margin-right: 6px; text-decoration: none;
+  }
+  .chip.ok { color: var(--ok); border-color: currentColor; }
+  .chip.warn { color: var(--warn); border-color: currentColor; }
+  img.shot {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+    max-height: 78vh; object-fit: contain; object-position: top;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+  kbd {
+    font: inherit; font-size: 11.5px; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; color: var(--muted);
+  }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>mapply</h1>
+  <div class="stats" id="stats"></div>
+  <nav>
+    <button data-view="review" aria-current="true">Review</button>
+    <button data-view="applications">Applications</button>
+    <button data-view="bank">Answers</button>
+  </nav>
+</header>
+<main id="main"></main>
+
+<script type="module">
+const main = document.getElementById('main');
+const statsEl = document.getElementById('stats');
+let view = 'review';
+let queue = [];
+let at = 0;
+
+const get = (path) => fetch(path).then((r) => r.json());
+const post = (path, body) =>
+  fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((r) => r.json());
+
+const esc = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+async function refreshStats() {
+  const s = await get('/api/stats');
+  const states = s.states ?? {};
+  statsEl.innerHTML =
+    '<b>' + (states.needs_review ?? 0) + '</b> to review · ' +
+    '<b>' + (states.submitted ?? 0) + '</b> submitted · ' +
+    '<b>' + (states.queued ?? 0) + '</b> queued · ' +
+    '<b>' + s.learned + '</b> answers learned · $' + (s.spentToday ?? 0).toFixed(3) + ' today';
+}
+
+async function renderReview() {
+  queue = await get('/api/review');
+  if (at >= queue.length) at = Math.max(0, queue.length - 1);
+
+  if (!queue.length) {
+    main.innerHTML = '<div class="empty">Nothing waiting. Run <code>mapply run</code> to fill more.</div>';
+    return;
+  }
+
+  const item = queue[at];
+  const questions = item.questions ?? [];
+
+  const questionCards = questions.length
+    ? questions.map((q, i) =>
+        '<div class="card"><div class="q">' +
+          '<label>' + (q.required ? '<span class="req">required</span> · ' : '') + esc(q.control) + '</label>' +
+          '<div class="ask">' + esc(q.label) + '</div>' +
+          '<div class="row">' +
+            '<input type="text" data-q="' + i + '" placeholder="' +
+              (q.suggestion ? 'suggested: ' + esc(q.suggestion) : 'your answer') +
+              '" value="' + esc(q.suggestion ?? '') + '">' +
+            '<button class="act primary" data-save="' + i + '">Save</button>' +
+          '</div>' +
+          (q.options && q.options.length
+            ? '<div class="hint">offers: ' + q.options.slice(0, 8).map(esc).join(' · ') + '</div>'
+            : '') +
+        '</div></div>')
+        .join('')
+    : '<div class="card"><div class="hint">No open questions — parked for another reason.' +
+        item.blocking.map((b) => '<div>· ' + esc(b) + '</div>').join('') + '</div></div>';
+
+  main.innerHTML =
+    '<div class="split"><div>' +
+      '<div class="card">' +
+        '<div class="role">' + esc(item.title) + '</div>' +
+        '<div class="co">' + esc(item.company) + '</div>' +
+        '<div class="why">' + esc(item.reason ?? '') +
+          (item.detail ? ' — ' + esc(item.detail) : '') + '</div>' +
+        '<div class="row" style="margin-top:12px">' +
+          '<span class="chip">' + (at + 1) + ' of ' + queue.length + '</span>' +
+          (item.waived.length ? '<span class="chip warn">' + item.waived.length + ' waived</span>' : '') +
+          '<a class="chip" href="' + esc(item.url) + '" target="_blank" rel="noopener">open the form ↗</a>' +
+        '</div>' +
+      '</div>' +
+      questionCards +
+      '<div class="card"><div class="row">' +
+        '<button class="act primary" id="requeue">Re-queue <kbd>r</kbd></button>' +
+        '<button class="act" id="skip">Dismiss <kbd>x</kbd></button>' +
+        '<button class="act" id="prev">Previous <kbd>←</kbd></button>' +
+        '<button class="act" id="next">Next <kbd>→</kbd></button>' +
+      '</div><div class="hint">An answer you save is reused on every later form that asks the same thing.</div></div>' +
+    '</div>' +
+    '<div class="card">' +
+      (item.hasScreenshot
+        ? '<img class="shot" src="/api/screenshot/' + item.id + '" alt="The form as it was left">'
+        : '<div class="empty">No screenshot was taken.</div>') +
+    '</div></div>';
+
+  main.querySelectorAll('[data-save]').forEach((button) => {
+    button.addEventListener('click', () => saveAnswer(Number(button.dataset.save)));
+  });
+  const on = (id, fn) => main.querySelector(id)?.addEventListener('click', fn);
+  on('#requeue', () => act('requeue'));
+  on('#skip', () => act('skip'));
+  on('#prev', () => move(-1));
+  on('#next', () => move(1));
+  main.querySelector('input[data-q]')?.focus();
+}
+
+async function saveAnswer(index) {
+  const item = queue[at];
+  const field = main.querySelector('input[data-q="' + index + '"]');
+  const answer = field?.value.trim();
+  if (!answer) return;
+
+  await post('/api/answer', { question: item.questions[index].label, answer });
+  field.disabled = true;
+  field.value = answer + '  ✓ learned';
+  await refreshStats();
+}
+
+async function act(kind) {
+  await post('/api/' + kind + '/' + queue[at].id);
+  await refreshStats();
+  await renderReview();
+}
+
+function move(step) {
+  if (!queue.length) return;
+  at = (at + step + queue.length) % queue.length;
+  renderReview();
+}
+
+async function renderApplications() {
+  const rows = await get('/api/applications');
+  main.innerHTML =
+    '<div class="card scroll"><table>' +
+    '<tr><th>#</th><th>State</th><th>Company</th><th>Role</th><th>Fit</th><th>Confirmed</th></tr>' +
+    rows.map((r) =>
+      '<tr><td>' + r.id + '</td><td>' + esc(r.state) +
+      (r.reason ? ' <span class="chip">' + esc(r.reason) + '</span>' : '') +
+      (r.dry_run ? ' <span class="chip">dry</span>' : '') + '</td>' +
+      '<td>' + esc(r.company) + '</td><td>' + esc(r.title) + '</td>' +
+      '<td>' + (r.ats_score ?? '') + '</td>' +
+      '<td>' + (r.confirmation_kind ? '<span class="chip ok">' + esc(r.confirmation_kind) + '</span>' : '') +
+      '</td></tr>').join('') +
+    '</table></div>';
+}
+
+async function renderBank() {
+  const rows = await get('/api/bank');
+  main.innerHTML = rows.length
+    ? '<div class="card scroll"><table>' +
+      '<tr><th>Used</th><th>Question</th><th>Answer</th><th>From</th></tr>' +
+      rows.map((r) =>
+        '<tr><td>' + r.times_used + '×</td><td>' + esc(r.question_text) + '</td>' +
+        '<td>' + esc(r.answer_text) + '</td><td>' + esc(r.source) + '</td></tr>').join('') +
+      '</table></div>'
+    : '<div class="empty">Nothing learned yet.</div>';
+}
+
+document.querySelectorAll('nav button').forEach((button) => {
+  button.addEventListener('click', () => {
+    view = button.dataset.view;
+    document.querySelectorAll('nav button').forEach((b) =>
+      b.setAttribute('aria-current', String(b === button)));
+    render();
+  });
+});
+
+// Shortcuts, but never while an answer is being typed - the field wins.
+document.addEventListener('keydown', (event) => {
+  if (view !== 'review') return;
+  const active = document.activeElement;
+  if (active && /^(INPUT|TEXTAREA)$/.test(active.tagName)) {
+    if (event.key === 'Enter' && active.dataset.q !== undefined) saveAnswer(Number(active.dataset.q));
+    return;
+  }
+  if (event.key === 'ArrowRight') move(1);
+  if (event.key === 'ArrowLeft') move(-1);
+  if (event.key === 'r') act('requeue');
+  if (event.key === 'x') act('skip');
+});
+
+function render() {
+  if (view === 'review') return renderReview();
+  if (view === 'applications') return renderApplications();
+  return renderBank();
+}
+
+await refreshStats();
+await render();
+</script>
+</body>
+</html>
