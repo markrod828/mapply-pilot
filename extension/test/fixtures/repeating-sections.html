@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply - Stripe</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 640px; margin: 30px auto; }
+  label { display:block; margin: 12px 0 4px; font-weight: 600; }
+  input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+  .section { border-top: 1px solid #ddd; padding-top: 16px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<form id="application_form">
+  <!-- Two repeating lists as siblings, each with its own "Add another".
+       This is the shape that made the filler grow education blocks forever:
+       climbing far enough to find any add button reaches a scope holding both. -->
+  <!-- Note there is deliberately no "Add another" for work history. That is the
+       shape that broke: with nothing to find here, the search climbed out of the
+       section and took education's button instead. -->
+  <div id="employment">
+    <div class="section entry">
+      <h3>Experience</h3>
+      <div><label for="c0">Company</label><input type="text" id="c0" name="company[0]"></div>
+      <div><label for="t0">Title</label><input type="text" id="t0" name="title[0]"></div>
+      <div><label for="sy0">Start year</label><input type="text" id="sy0" name="start_year[0]"></div>
+    </div>
+  </div>
+
+  <div id="education">
+    <div class="section entry">
+      <h3>Education</h3>
+      <div><label for="s0">School</label><input type="text" id="s0" name="school[0]"></div>
+      <div><label for="d0">Degree</label><input type="text" id="d0" name="degree[0]"></div>
+    </div>
+    <a href="#" id="add-education">Add another</a>
+  </div>
+</form>
+
+<script>
+  // Each button grows only its own list, exactly as a real form does.
+  let educationRows = 1;
+  document.getElementById('add-education').addEventListener('click', (e) => {
+    e.preventDefault();
+    const n = educationRows++;
+    const block = document.createElement('div');
+    block.className = 'section entry';
+    block.innerHTML =
+      '<h3>Education</h3>' +
+      '<div><label for="s' + n + '">School</label><input type="text" id="s' + n + '" name="school[' + n + ']"></div>' +
+      '<div><label for="d' + n + '">Degree</label><input type="text" id="d' + n + '" name="degree[' + n + ']"></div>';
+    document.getElementById('add-education').before(block);
+  });
+</script>
+</body>
+</html>

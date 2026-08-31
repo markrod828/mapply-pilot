@@ -2,6 +2,7 @@ import { isCurrentRole, monthFromLabel, monthOptions, parseMonthYear } from '@ma
 import type { ExperienceEntry } from '@mapply/core/types';
 import { waitFor } from './combobox';
 import {
+  claimAttempt,
   collectFields,
   describeField,
   hasValue,
@@ -100,7 +101,7 @@ function readRow(root: HTMLElement): RowFields {
   return row;
 }
 
-function findRows(): HTMLElement[] {
+export function findRows(): HTMLElement[] {
   const roots: HTMLElement[] = [];
 
   for (const field of collectFields()) {
@@ -187,24 +188,38 @@ function fillRow(root: HTMLElement, role: ExperienceEntry, handled: Set<Fillable
 }
 
 /** The control that creates the next row, searched outward from the rows themselves. */
-function addAnotherFor(rows: HTMLElement[]): HTMLElement | null {
+/**
+ * The "Add another" belonging to these rows, and to nothing else.
+ *
+ * Only the rows' own container is searched. The previous version climbed five
+ * levels looking for any matching control, which on a form that repeats both
+ * employment and education - as most do - eventually reached a scope holding
+ * both buttons and took the wrong one. Worse, a form whose work-history section
+ * has no add button at all would always find education's, and clicking it grew
+ * an empty education block that the next pass then tried to fill, forever.
+ *
+ * A list's add button sits with the list. If it is not there, this list cannot
+ * be extended, and filling only the rows that already exist is a far better
+ * outcome than adding rows to something else.
+ */
+export function addAnotherFor(rows: HTMLElement[]): HTMLElement | null {
   const last = rows[rows.length - 1];
-  let scope: HTMLElement | null = last?.parentElement ?? null;
+  const scope = last?.parentElement;
+  if (!last || !scope) return null;
 
-  for (let depth = 0; scope && depth < 5; depth += 1) {
-    const controls = Array.from(
-      scope.querySelectorAll<HTMLElement>('button, a, [role="button"]'),
-    ).filter(
-      (control) =>
-        isVisible(control) &&
-        !(control as HTMLButtonElement).disabled &&
-        ADD_ANOTHER.test((control.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase()),
-    );
-    if (controls.length) return controls[controls.length - 1];
-    scope = scope.parentElement;
-  }
-  return null;
+  const candidates = Array.from(scope.querySelectorAll<HTMLElement>('button, a, [role="button"]')).filter(
+    (control) =>
+      isVisible(control) &&
+      !(control as HTMLButtonElement).disabled &&
+      // Not one of the row's own controls, and after the row it extends.
+      !rows.some((row) => row.contains(control)) &&
+      ADD_ANOTHER.test((control.textContent ?? '').replace(/s+/g, ' ').trim().toLowerCase()) &&
+      Boolean(last.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING),
+  );
+
+  return candidates[0] ?? null;
 }
+
 
 /**
  * Fills the work-history rows from the resume, adding rows as needed.
@@ -228,6 +243,12 @@ export async function fillEmploymentHistory(
     if (index >= rows.length) {
       const add = addAnotherFor(rows);
       if (!add) break;
+      // At most one click per button per press. The sweep that fills newly
+      // arrived fields re-runs this on every DOM change, and the click is
+      // itself a DOM change - so without a budget a click that fails to grow
+      // the list repeats for as long as the page is open, adding an empty row
+      // each time. Ten stray education blocks is what that looked like.
+      if (!claimAttempt(add)) break;
 
       const before = rows.length;
       add.click();
