@@ -40,7 +40,6 @@ export function formatDateFor(hint: string, iso: string): string | null {
   if (/d{1,2}\s*([-/.])\s*m{1,2}\s*\1\s*yyyy/.test(shape)) return `${d}${sep}${m}${sep}${year}`;
   if (/m{1,2}\s*([-/.])\s*d{1,2}\s*\1\s*yyyy/.test(shape)) return `${m}${sep}${d}${sep}${year}`;
   if (/m{1,2}\s*([-/.])\s*yyyy/.test(shape)) return `${m}${sep}${year}`;
-  if (/mm\s*([-/.])\s*yyyy/.test(shape)) return `${month}${separator(shape)}${year}`;
 
   return null;
 }
