@@ -227,9 +227,25 @@ export function addAnotherFor(rows: HTMLElement[]): HTMLElement | null {
  * Runs before the label rules so a bare "Title" box inside a job row is claimed by the
  * job it belongs to rather than by the profile's current title.
  */
+export interface EmploymentOptions {
+  /**
+   * Whether new rows may be created.
+   *
+   * True only when somebody pressed Autofill. The background sweep exists to
+   * fill fields that arrive later - a wizard's next step, a section that
+   * expands - and it is triggered by the page changing. Letting it create rows
+   * makes it its own trigger: the click changes the DOM, the change wakes the
+   * sweep, the sweep clicks again. That loop is what filled a form with empty
+   * blocks, and no amount of care inside the click removes it. Only a person
+   * asking for it can add rows.
+   */
+  mayAddRows: boolean;
+}
+
 export async function fillEmploymentHistory(
   experience: ExperienceEntry[],
   handled: Set<Fillable>,
+  { mayAddRows }: EmploymentOptions = { mayAddRows: false },
 ): Promise<string[]> {
   if (!experience.length) return [];
 
@@ -241,6 +257,8 @@ export async function fillEmploymentHistory(
 
   for (let index = 0; index < wanted; index += 1) {
     if (index >= rows.length) {
+      if (!mayAddRows) break;
+
       const add = addAnotherFor(rows);
       if (!add) break;
       // At most one click per button per press. The sweep that fills newly

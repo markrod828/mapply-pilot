@@ -75,7 +75,7 @@ async function fillKnownFields(payload: AutofillPayload): Promise<string[]> {
   const handled = new Set<Fillable>();
 
   applyAdapter(payload, handled, result);
-  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled)));
+  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled, { mayAddRows: false })));
   await applyRules(payload, handled, result);
   applyChoiceGroups(payload, result);
   applyConsent(payload, handled, result);
@@ -143,7 +143,7 @@ export async function runAutofill(payload: AutofillPayload): Promise<AutofillRes
 
   const handled = new Set<Fillable>();
   applyAdapter(payload, handled, result);
-  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled)));
+  result.filled.push(...(await fillEmploymentHistory(payload.experience ?? [], handled, { mayAddRows: true })));
   await applyRules(payload, handled, result);
   applyChoiceGroups(payload, result);
   applyConsent(payload, handled, result);
