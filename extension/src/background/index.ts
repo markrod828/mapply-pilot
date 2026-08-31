@@ -145,20 +145,22 @@ async function onJobCaptured(job: JobPosting, tabId?: number) {
   await saveJob(record);
   await setActiveJobKey(job.jobKey);
 
-  const settings = await getSettings();
+  // Capturing a posting does not score it. Scoring costs a call, and more to
+  // the point it is a judgement about a job nobody has read yet - so it waits
+  // for Score now. A score already computed for this posting still shows on the
+  // badge: showing what is known is not the same as deciding to spend on
+  // something new.
   const resume = await getResume();
+  const known =
+    record.baseScore && record.baseResumeHash === hashText(resume?.text ?? '')
+      ? record.baseScore
+      : undefined;
 
-  if (record.baseScore && record.baseResumeHash === hashText(resume?.text ?? '')) {
-    if (tabId !== undefined) await showBadge(tabId, record.baseScore.overall);
-    return { ok: true, score: record.baseScore };
+  if (tabId !== undefined) {
+    if (known) await showBadge(tabId, known.overall);
+    else await clearBadge(tabId);
   }
-
-  if (!settings.autoScore || !settings.openaiApiKey || !resume?.text) {
-    if (tabId !== undefined) await clearBadge(tabId);
-    return { ok: true };
-  }
-
-  return runScore(job, descriptionChanged, tabId);
+  return { ok: true, score: known };
 }
 
 function jobFingerprint(job: Pick<JobPosting, 'title' | 'description'>): string {

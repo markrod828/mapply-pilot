@@ -276,7 +276,6 @@ export interface Settings {
   openaiApiKey: string;
   scoreModel: string;
   tailorModel: string;
-  autoScore: boolean;
   /** Write answers to screening questions the form asks during autofill. */
   answerQuestions: boolean;
   resumeTemplate: ResumeTemplate;
@@ -316,7 +315,6 @@ export const DEFAULT_SETTINGS: Settings = {
   openaiApiKey: '',
   scoreModel: 'gpt-4o-mini',
   tailorModel: 'gpt-4o',
-  autoScore: true,
   answerQuestions: true,
   resumeTemplate: 'classic',
   saveDirectoryName: '',

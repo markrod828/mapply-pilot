@@ -109,15 +109,6 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           </div>
         </div>
 
-        <label className="row" style={{ gap: 6, marginTop: 4 }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={draft.autoScore}
-            onChange={(event) => update({ autoScore: event.target.checked })}
-          />
-          <span>Score automatically when I open a job on Jobright</span>
-        </label>
 
         <label className="row" style={{ gap: 6 }}>
           <input

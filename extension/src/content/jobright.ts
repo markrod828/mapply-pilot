@@ -182,10 +182,17 @@ async function scan() {
 
   capturedJobId = jobId;
   overlay?.setScore(null, 'Scoring your resume…');
-  await requestScore(job);
+  await captureJob(job);
 }
 
-async function requestScore(job: JobPosting) {
+/**
+ * Hands the posting to the extension and shows whatever is already known.
+ *
+ * Capturing is not scoring. Opening a job records it and displays a score if
+ * one was computed earlier; working out a new one waits for Score now, so
+ * nothing is judged - or paid for - before it has been read.
+ */
+async function captureJob(job: JobPosting) {
   const jobId = jobInfoIdFromUrl(location.href);
   if (!jobId || jobId !== activeJobId) return;
 
@@ -202,7 +209,7 @@ async function requestScore(job: JobPosting) {
     } else if (response?.error) {
       overlay?.setScore(null, response.error);
     } else {
-      overlay?.setScore(null, 'Open ApplyPilot to score this job');
+      overlay?.setScore(null, 'Open ApplyPilot and press Score now');
     }
   } catch {
     overlay?.setScore(null, 'ApplyPilot reloaded - refresh the page');
