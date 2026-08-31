@@ -1,7 +1,9 @@
 import type { Locator } from 'playwright';
 import type { ReviewReason } from '@mapply/core/application';
 import { selectComboboxOption } from './combobox';
+import { setDate } from './dates';
 import { discoverFields, type DiscoveredField } from './discover';
+import { fingerprintForm, scrubTerms } from './fingerprint';
 import { matchRule, questionKey } from './rules';
 import type { FormRoot } from './templates/index';
 import type { FormTemplate, Target, TemplatePlan } from './templates/types';
@@ -31,6 +33,13 @@ export interface FillOutcome {
   delegated: string[];
   /** Questions nobody could answer. These are what a person is shown. */
   unanswered: UnansweredQuestion[];
+  /**
+   * Identity of the form's shape, for recognising it again.
+   *
+   * Absent when discovery found nothing to fingerprint, which is itself worth
+   * knowing - a form nobody can describe is not one to trust.
+   */
+  fingerprint?: string;
   /**
    * Fields that could not be filled but were not allowed to stop the
    * application. Kept apart from blocking, so the record shows what went out
@@ -131,6 +140,15 @@ async function answerQuestions(
     }
   }
 
+  if (fields.length) {
+    outcome.fingerprint = fingerprintForm(
+      template.atsKind,
+      originOf(root),
+      fields,
+      scrubTerms(ctx.job.company, ctx.job.url),
+    );
+  }
+
   for (const field of fields) {
     if (field.hasValue || field.control === 'file' || !field.label) continue;
 
@@ -158,10 +176,7 @@ async function answerQuestions(
     }
 
     await delay(jitter(400, 150));
-    const ok =
-      field.control === 'select' || field.control === 'combobox'
-        ? (await applyDiscoveredChoice(root, locator, resolved, field)).ok
-        : (await writeVerified(locator, resolved, { comparator: 'loose' })).ok;
+    const ok = await setDiscovered(root, locator, resolved, field);
 
     outcome.filled.push({ where: `"${field.label}"`, what: 'answer', ok, got: resolved });
     if (!ok) {
@@ -189,6 +204,15 @@ async function answerQuestions(
   }
 }
 
+/** The origin a form is served from, or an empty string if it cannot be read. */
+function originOf(root: FormRoot): string {
+  try {
+    return new URL(root.url()).origin;
+  } catch {
+    return '';
+  }
+}
+
 /** Bank first, then the rules. Neither guesses. */
 async function resolveAnswer(field: DiscoveredField, ctx: FillContext): Promise<string | null> {
   const banked = await ctx.lookupAnswer?.(questionKey(field.label), field.label);
@@ -198,6 +222,88 @@ async function resolveAnswer(field: DiscoveredField, ctx: FillContext): Promise<
   if (!rule) return null;
   const value = resolveValue(rule.key, ctx);
   return value || null;
+}
+
+/**
+ * Sets a discovered field, whichever kind of control it turned out to be.
+ *
+ * Radios and checkboxes are handled here rather than through the text path
+ * because writing a value to them does nothing at all: they are set by being
+ * clicked, and the thing to click is often the label, since styled forms hide
+ * the real input behind one.
+ */
+async function setDiscovered(
+  root: FormRoot,
+  locator: Locator,
+  want: string,
+  field: DiscoveredField,
+): Promise<boolean> {
+  if (field.control === 'select' || field.control === 'combobox') {
+    return (await applyDiscoveredChoice(root, locator, want, field)).ok;
+  }
+  if (field.control === 'date') return setDate(locator, want);
+  if (field.control === 'radiogroup') return setRadioGroup(locator, want);
+  if (field.control === 'checkbox') return setCheckbox(locator, want);
+  return (await writeVerified(locator, want, { comparator: 'loose' })).ok;
+}
+
+/**
+ * Picks one radio out of its group, by what the option says.
+ *
+ * Matched by meaning and never by position: on a Yes/No, taking the first
+ * option is a coin flip recorded as an answer. Clicks the option's label rather
+ * than the input, because a styled form routinely hides the input itself, and
+ * reads the result back rather than trusting the click.
+ */
+async function setRadioGroup(lead: Locator, want: string): Promise<boolean> {
+  return lead
+    .evaluate((element, wanted) => {
+      const input = element as HTMLInputElement;
+      const root = input.getRootNode() as Document | ShadowRoot;
+      const members = Array.from(
+        root.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(input.name)}"]`),
+      );
+      if (!members.length) return false;
+
+      const labelOf = (member: HTMLInputElement): string => {
+        const own = member.id ? root.querySelector(`label[for="${CSS.escape(member.id)}"]`) : null;
+        const text = own?.textContent ?? member.closest('label')?.textContent ?? member.value;
+        return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+      };
+
+      const target = wanted.trim().toLowerCase();
+      const pick =
+        members.find((member) => labelOf(member) === target) ??
+        members.find((member) => labelOf(member).startsWith(target)) ??
+        members.find((member) => labelOf(member).includes(target));
+      if (!pick) return false;
+
+      const label = pick.id ? root.querySelector<HTMLElement>(`label[for="${CSS.escape(pick.id)}"]`) : null;
+      (label ?? pick).click();
+      return pick.checked;
+    }, want)
+    .catch(() => false);
+}
+
+/**
+ * Ticks a checkbox when the answer is affirmative.
+ *
+ * Only ever ticks. A box the form arrived with already ticked was ticked for a
+ * reason, and clearing it on the strength of a fuzzy match would be a change
+ * nobody asked for.
+ */
+async function setCheckbox(locator: Locator, want: string): Promise<boolean> {
+  if (!/^(yes|true|1|agree|accept|i agree)/i.test(want.trim())) return false;
+  await locator.check({ timeout: 5000 }).catch(async () => {
+    // A hidden input cannot be checked directly; its label is what a person clicks.
+    await locator.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      const root = input.getRootNode() as Document | ShadowRoot;
+      const label = input.id ? root.querySelector<HTMLElement>(`label[for="${CSS.escape(input.id)}"]`) : null;
+      (label ?? input.closest('label') ?? input).click();
+    }).catch(() => {});
+  });
+  return locator.isChecked().catch(() => false);
 }
 
 async function applyDiscoveredChoice(
@@ -251,6 +357,9 @@ async function reverify(
     outcome.reason = 'verification_failed';
   }
 }
+
+/** Profile values that are dates, whatever control a form puts them in. */
+const DATE_VALUES: ReadonlySet<string> = new Set(['availableStartDate']);
 
 /** How a field is described in the log and in the review queue. */
 function describe(target: Target): string {
@@ -312,10 +421,15 @@ async function applyField(
     return;
   }
 
-  const result = await writeVerified(locator, want, {
-    comparator: field.comparator ?? comparatorFor(field.value),
-    typeOnly: field.typeahead,
-  });
+  // A date is written as a date even when the template called it text: the box
+  // decides the format, and ISO typed into one expecting DD/MM is not rejected,
+  // it is accepted as the wrong day.
+  const result = DATE_VALUES.has(field.value)
+    ? { ok: await setDate(locator, want), via: undefined, got: want }
+    : await writeVerified(locator, want, {
+        comparator: field.comparator ?? comparatorFor(field.value),
+        typeOnly: field.typeahead,
+      });
   outcome.filled.push({ where, what: field.value, ok: result.ok, via: result.via, got: result.got });
   if (!result.ok) {
     outcome.blocking.push(`${where} (wrote "${want}", read back "${result.got}")`);
@@ -466,7 +580,7 @@ async function findUploadTrigger(root: FormRoot, input: Locator): Promise<Locato
       let node: Element | null = element;
       for (let depth = 0; depth < 5 && node; depth += 1) {
         const button = Array.from(node.querySelectorAll('button')).find((candidate) =>
-          TRIGGER.test((candidate.textContent ?? '').replace(/s+/g, ' ').trim()),
+          TRIGGER.test((candidate.textContent ?? '').replace(/\s+/g, ' ').trim()),
         );
         if (button) {
           const marker = `mpup${Date.now() % 100000}`;

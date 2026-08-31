@@ -14,5 +14,15 @@ export async function prepareContext(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
     const scope = globalThis as unknown as { __name?: unknown };
     if (!scope.__name) scope.__name = (fn: unknown) => fn;
+
+    // Closed shadow roots are, by design, unreachable from page scripts - a form
+    // inside one is invisible no matter how carefully it is searched for. Asking
+    // for them open at document start costs the page nothing and is the only way
+    // to fill a component that hides its own inputs. Safe here because these are
+    // application forms, not sites looking for automation.
+    const attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function attachShadowOpen(this: Element, init: ShadowRootInit) {
+      return attach.call(this, { ...init, mode: 'open' });
+    };
   });
 }

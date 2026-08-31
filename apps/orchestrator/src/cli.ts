@@ -302,6 +302,7 @@ async function doRun(argv: string[]): Promise<void> {
   console.log(`submitted  ${result.submitted}`);
   console.log(`parked     ${result.parked}`);
   console.log(`failed     ${result.failed}`);
+  if (result.retried) console.log(`retrying   ${result.retried} (queued again with a delay)`);
   if (result.skipped) console.log(`skipped    ${result.skipped} (scored below the floor)`);
   if (result.spentUsd) console.log(`spent      ${result.spentUsd.toFixed(3)} today`);
   if (result.parked) console.log('See what stopped them with: mapply questions');

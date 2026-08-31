@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { InvalidTransition } from '@mapply/core/application';
-import { claimNext, openStore, recoverStaleLeases, transition, type Store } from '../src/index';
+import {
+  CLEAN_RUNS_REQUIRED,
+  claimNext,
+  mayAutoSubmit,
+  openStore,
+  recordFormRun,
+  recoverStaleLeases,
+  transition,
+  type Store,
+} from '../src/index';
 
 async function seed(store: Store): Promise<number> {
   const now = Date.now();
@@ -163,5 +172,56 @@ describe('duplicate guards', () => {
     await store.db.insertInto('jobs').values(values).execute();
     await assert.rejects(() => store.db.insertInto('jobs').values(values).execute());
     await store.close();
+  });
+});
+
+describe('form trust', () => {
+  const run = (store: Store, clean: boolean) =>
+    recordFormRun(store, {
+      fingerprint: 'fp-1',
+      atsKind: 'greenhouse',
+      origin: 'https://example.com',
+      fieldCount: 8,
+      clean,
+    });
+
+  it('earns the right to submit only after several clean runs', async () => {
+    const store = openStore(':memory:');
+    try {
+      for (let i = 1; i < CLEAN_RUNS_REQUIRED; i += 1) {
+        assert.equal(run(store, true).autoSubmitOk, false, `still unproven after ${i} run(s)`);
+      }
+      assert.equal(run(store, true).autoSubmitOk, true);
+      assert.equal(mayAutoSubmit(store, 'fp-1'), true);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('spends that trust entirely on one bad run', async () => {
+    // Not merely paused. A form that fails every other time must never drift
+    // into submitting on its own.
+    const store = openStore(':memory:');
+    try {
+      for (let i = 0; i < CLEAN_RUNS_REQUIRED; i += 1) run(store, true);
+      assert.equal(mayAutoSubmit(store, 'fp-1'), true);
+
+      const after = run(store, false);
+      assert.equal(after.cleanRuns, 0);
+      assert.equal(after.autoSubmitOk, false);
+      assert.equal(mayAutoSubmit(store, 'fp-1'), false);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('never trusts a form it has not seen', async () => {
+    const store = openStore(':memory:');
+    try {
+      assert.equal(mayAutoSubmit(store, 'never-seen'), false);
+      assert.equal(mayAutoSubmit(store, undefined), false);
+    } finally {
+      await store.close();
+    }
   });
 });

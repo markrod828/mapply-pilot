@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { formatDateFor } from '../src/dates';
 import { equivalent } from '../src/write';
 import { comparatorFor, resolveValue, type FillContext } from '../src/values';
 import type { Profile } from '@mapply/core';
@@ -91,5 +92,40 @@ describe('resolveValue', () => {
     // a blank written over a form's default is a wrong answer nobody notices.
     assert.equal(resolveValue('gender', ctx), '');
     assert.equal(resolveValue('veteranStatus', ctx), '');
+  });
+});
+
+describe('formatDateFor', () => {
+  const iso = '2026-09-05';
+
+  it('follows the order the box asks for', () => {
+    // The failure this prevents is silent: ISO typed into a DD/MM box is not
+    // rejected, it is accepted as the fifth of September or the ninth of May
+    // depending on which way round the form reads it.
+    assert.equal(formatDateFor('MM/DD/YYYY', iso), '09/05/2026');
+    assert.equal(formatDateFor('DD/MM/YYYY', iso), '05/09/2026');
+    assert.equal(formatDateFor('YYYY-MM-DD', iso), '2026-09-05');
+  });
+
+  it('keeps the separator the box uses', () => {
+    assert.equal(formatDateFor('DD.MM.YYYY', iso), '05.09.2026');
+    assert.equal(formatDateFor('DD-MM-YYYY', iso), '05-09-2026');
+  });
+
+  it('handles the spelled-out month forms', () => {
+    assert.equal(formatDateFor('DD-MMM-YYYY', iso), '05-Sep-2026');
+    assert.equal(formatDateFor('MMM D, YYYY', iso), 'Sep 5, 2026');
+  });
+
+  it('declines rather than guesses when the box says nothing useful', () => {
+    // Writing something unreadable into a date field is worse than leaving it
+    // for a person: the application goes out with a date nobody chose.
+    assert.equal(formatDateFor('', iso), null);
+    assert.equal(formatDateFor('enter your start date', iso), null);
+  });
+
+  it('declines a value that is not a date', () => {
+    assert.equal(formatDateFor('MM/DD/YYYY', 'next Tuesday'), null);
+    assert.equal(formatDateFor('MM/DD/YYYY', ''), null);
   });
 });

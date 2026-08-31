@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Staff Engineer - Contoso</title>
+<meta property="og:site_name" content="Contoso">
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 620px; margin: 40px auto; padding: 0 20px; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; }
+  input[type=text], input[type=email], input[type=tel] { width: 100%; padding: 8px; box-sizing: border-box; }
+  .dropzone { border: 2px dashed #999; padding: 16px; text-align: center; }
+  .dropzone input[type=file] { display: none; }
+  fieldset { margin-top: 24px; }
+  /* The real radio is hidden and the label is what a person clicks - the common
+     styled-form pattern, and the one that defeats setting `checked` directly. */
+  .choice input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
+  .choice label { display: inline-block; font-weight: 400; margin-right: 16px;
+                  padding: 6px 14px; border: 1px solid #999; border-radius: 999px; cursor: pointer; }
+  .choice input[type=radio]:checked + label { background: #2563eb; color: #fff; border-color: #2563eb; }
+</style>
+</head>
+<body>
+<h1>Staff Engineer</h1>
+<p class="location">Austin, TX</p>
+<p>Contoso is hiring a staff engineer for its platform group.</p>
+
+<form id="application_form" action="https://boards.greenhouse.io/contoso/applications" method="post">
+  <label for="first_name">First Name *</label>
+  <input type="text" id="first_name" name="first_name" required>
+
+  <label for="last_name">Last Name *</label>
+  <input type="text" id="last_name" name="last_name" required>
+
+  <label for="email">Email *</label>
+  <input type="email" id="email" name="email" required>
+
+  <label>Resume/CV *</label>
+  <div class="dropzone">
+    Drag and drop or
+    <button type="button">Attach</button>
+    <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+  </div>
+
+  <div id="custom_fields">
+    <fieldset class="choice">
+      <legend>Are you legally authorized to work in the United States?</legend>
+      <input type="radio" id="auth_yes" name="work_auth" value="yes" required>
+      <label for="auth_yes">Yes</label>
+      <input type="radio" id="auth_no" name="work_auth" value="no">
+      <label for="auth_no">No</label>
+    </fieldset>
+
+    <fieldset class="choice">
+      <legend>Will you now or in the future require sponsorship?</legend>
+      <input type="radio" id="spon_yes" name="sponsorship" value="yes" required>
+      <label for="spon_yes">Yes</label>
+      <input type="radio" id="spon_no" name="sponsorship" value="no">
+      <label for="spon_no">No</label>
+    </fieldset>
+
+    <!-- An input the page keeps inside a shadow root. Invisible to
+         querySelectorAll, which stops at the boundary. -->
+    <label>LinkedIn Profile</label>
+    <linkedin-field></linkedin-field>
+
+    <!-- And one inside a closed root, which page scripts cannot reach at all
+         unless attachShadow was intercepted before the component ran. -->
+    <label>Website</label>
+    <website-field></website-field>
+
+    <p style="margin-top:20px">
+      <input type="checkbox" id="terms" name="terms" required>
+      <label for="terms" style="display:inline; font-weight:400">
+        I agree to the privacy policy and terms of use *
+      </label>
+    </p>
+  </div>
+
+  <p><button type="submit" id="submit_app">Submit Application</button></p>
+</form>
+
+<script>
+  class LinkedinField extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML =
+        '<input type="text" aria-label="LinkedIn Profile" style="width:100%;padding:8px;box-sizing:border-box">';
+    }
+  }
+  class WebsiteField extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: 'closed' });
+      root.innerHTML =
+        '<input type="text" aria-label="Website" style="width:100%;padding:8px;box-sizing:border-box">';
+    }
+  }
+  customElements.define('linkedin-field', LinkedinField);
+  customElements.define('website-field', WebsiteField);
+</script>
+</body>
+</html>

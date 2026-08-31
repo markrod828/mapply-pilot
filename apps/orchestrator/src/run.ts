@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import type { BrowserContext, Page } from 'playwright';
 import {
-  applyTemplate,
+  fillForm,
   collectValidationErrors,
   findTemplate,
   submitAndConfirm,
@@ -12,10 +12,21 @@ import {
   type FormTemplate,
 } from '@mapply/filler';
 import type { JobPosting } from '@mapply/core';
-import { claimNext, getAnswer, openStore, recordEvent, transition, type Store } from '@mapply/db';
+import {
+  CLEAN_RUNS_REQUIRED,
+  claimNext,
+  getAnswer,
+  mayAutoSubmit,
+  openStore,
+  recordEvent,
+  recordFormRun,
+  transition,
+  type Store,
+} from '@mapply/db';
 import { launchBrowser } from './browser';
 import { loadIdentity, type Identity } from './identity';
 import { openApplication, upsertJob } from './jobs';
+import { checkDomain, classifyFailure, handleFailure, noteOutcome, noteRequest } from './pacing';
 import { ensureDataDirs, paths } from './paths';
 import { prepare, settingsFromEnv, spendToday } from './tailoring';
 
@@ -100,6 +111,7 @@ export interface QueueResult {
   submitted: number;
   parked: number;
   failed: number;
+  retried: number;
   skipped: number;
   spentUsd: number;
   results: RunResult[];
@@ -122,7 +134,7 @@ export async function runQueue(options: QueueOptions = {}): Promise<QueueResult>
   const worker = `local-${process.pid}`;
 
   const result: QueueResult = {
-    prepared: 0, attempted: 0, submitted: 0, parked: 0, failed: 0, skipped: 0,
+    prepared: 0, attempted: 0, submitted: 0, parked: 0, failed: 0, retried: 0, skipped: 0,
     spentUsd: 0, results: [],
   };
 
@@ -152,6 +164,25 @@ export async function runQueue(options: QueueOptions = {}): Promise<QueueResult>
         .prepare('SELECT * FROM jobs WHERE id = ?')
         .get(claimed.job_id) as Record<string, unknown>;
       const target = (job.apply_url as string) || (job.url as string);
+
+      const domain = checkDomain(store, target);
+      if (domain.circuitOpen) {
+        // Left alone rather than hammered. Putting it back on the queue keeps it
+        // in view without spending the run on a host that is refusing.
+        say(`skipping ${job.company}: ${new URL(target).hostname} is in cooldown`);
+        await transition(store, {
+          applicationId: claimed.id,
+          to: 'queued',
+          reason: 'circuit_open',
+          patch: { next_attempt_at: Date.now() + domain.waitMs, lease_owner: null, lease_expires_at: null },
+        });
+        continue;
+      }
+      if (domain.waitMs > 0) {
+        say(`  pausing ${Math.round(domain.waitMs / 1000)}s before the next request to this host`);
+        await new Promise((done) => setTimeout(done, domain.waitMs));
+      }
+      noteRequest(store, target);
 
       result.attempted += 1;
       say(`[${result.attempted}/${limit}] ${job.company} - ${job.title}`);
@@ -190,16 +221,28 @@ export async function runQueue(options: QueueOptions = {}): Promise<QueueResult>
         if (outcome.state === 'submitted') result.submitted += 1;
         else if (outcome.state === 'failed') result.failed += 1;
         else result.parked += 1;
+        // Parking is not a failure of the host - the page answered, we chose not
+        // to send. Only a real failure counts against it.
+        noteOutcome(store, target, outcome.state !== 'failed');
         say(`    -> ${outcome.state}${outcome.reason ? ` (${outcome.reason})` : ''}`);
       } catch (error) {
-        result.failed += 1;
-        await transition(store, {
-          applicationId: claimed.id,
-          to: 'failed',
-          reason: 'page_error',
-          reasonDetail: (error as Error).message.slice(0, 500),
-        }).catch(() => {});
-        say(`    -> failed (${(error as Error).message.slice(0, 80)})`);
+        const text = await page.locator('body').innerText().catch(() => '');
+        const reason = classifyFailure(error as Error, text.slice(0, 2000));
+        noteOutcome(store, target, false);
+
+        const decision = await handleFailure(
+          store,
+          claimed.id,
+          reason,
+          (error as Error).message,
+          claimed.attempt_count,
+          3,
+        ).catch(() => 'dead' as const);
+
+        if (decision === 'retry') result.retried += 1;
+        else if (decision === 'parked') result.parked += 1;
+        else result.failed += 1;
+        say(`    -> ${reason}${decision === 'retry' ? ', will try again later' : ''}`);
       } finally {
         await page.close().catch(() => {});
       }
@@ -320,7 +363,10 @@ async function drive(
     lookupAnswer: async (key) => getAnswer(store, key, `company:${posting.company.toLowerCase()}`),
   };
 
-  const outcome = await applyTemplate(match.root, match.template, ctx);
+  // fillForm rather than a single pass: a one-page form is simply a wizard with
+  // one step, and routing both through the same code means the multi-step path
+  // is exercised every day rather than only on the forms that need it.
+  const outcome = await fillForm(match.root, match.template, ctx);
   await recordEvent(store, applicationId, 'fill', outcome);
 
   // Whatever the form itself objects to is required, whatever its markup says -
@@ -334,6 +380,25 @@ async function drive(
       (/^:\s/.test(message) && outcome.waived.length > 0);
     if (excused) outcome.waived.push(`form says: ${message}`);
     else outcome.blocking.push(`form says: ${message}`);
+  }
+
+  // The form's shape is recorded before anything is decided, so a run that is
+  // about to be parked still counts against this shape's standing.
+  const standing = outcome.fingerprint
+    ? recordFormRun(store, {
+        fingerprint: outcome.fingerprint,
+        atsKind: match.template.atsKind,
+        origin: originOf(page.url()),
+        fieldCount: outcome.filled.length + outcome.unanswered.length,
+        clean: outcome.blocking.length === 0,
+        planJson: JSON.stringify(outcome),
+      })
+    : undefined;
+
+  if (outcome.fingerprint) {
+    store.sqlite
+      .prepare('UPDATE applications SET form_fingerprint = ? WHERE id = ?')
+      .run(outcome.fingerprint, applicationId);
   }
 
   const shot = await screenshot(page, applicationId, submit ? 'before-submit' : 'dry-run');
@@ -363,6 +428,25 @@ async function drive(
     return { ...base, state: 'needs_review', reason: outcome.reason ?? 'low_confidence' };
   }
 
+  if (submit && !mayAutoSubmit(store, outcome.fingerprint)) {
+    // A clean fill, but this shape has not yet earned the right to send itself.
+    // Every field verified only proves the fields we knew to look for; filling
+    // the same shape cleanly several times running is what shows we understood
+    // the form rather than got lucky with it.
+    const remaining = Math.max(0, CLEAN_RUNS_REQUIRED - (standing?.cleanRuns ?? 0));
+    await transition(store, {
+      applicationId,
+      to: 'needs_review',
+      reason: 'low_confidence',
+      reasonDetail:
+        `This form's shape has been filled cleanly ${standing?.cleanRuns ?? 0} time(s). ` +
+        `${remaining} more clean run(s) and it may submit on its own. Review the ` +
+        'screenshot, then run it again.',
+      patch: { screenshot_path: shot, plan_json: JSON.stringify(outcome) },
+    });
+    return { ...base, state: 'needs_review', reason: 'unproven_form' };
+  }
+
   if (!submit) {
     // A clean dry run. Parked rather than called done, because nobody has looked
     // at it yet and the whole point is that somebody does.
@@ -370,7 +454,10 @@ async function drive(
       applicationId,
       to: 'needs_review',
       reason: 'low_confidence',
-      reasonDetail: 'Dry run completed with nothing blocking. Review the screenshot, then re-run with --submit.',
+      reasonDetail:
+        'Dry run completed with nothing blocking. ' +
+        `This form's shape is ${standing?.cleanRuns ?? 0}/${CLEAN_RUNS_REQUIRED} of the way ` +
+        'to being trusted to submit itself.',
       patch: { screenshot_path: shot, plan_json: JSON.stringify(outcome) },
     });
     return { ...base, state: 'needs_review', reason: 'dry_run' };
@@ -467,6 +554,14 @@ async function screenshot(page: Page, applicationId: number, label: string): Pro
   return file;
 }
 
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return '';
+  }
+}
+
 function sourceIdFor(url: string): string {
   let hash = 0;
   for (let index = 0; index < url.length; index += 1) {
@@ -506,7 +601,7 @@ async function readPostingDetails(page: Page): Promise<{
         `meta[property="${property}"], meta[name="${property}"]`,
       )?.content ?? '';
     const text = (selector: string) =>
-      (document.querySelector(selector)?.textContent ?? '').replace(/s+/g, ' ').trim();
+      (document.querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
     return {
       title: text('h1') || meta('og:title') || document.title || 'Unknown role',

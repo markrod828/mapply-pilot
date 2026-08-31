@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { questionKey } from '@mapply/filler';
 
 /**
  * The queue, worked end to end against local fixtures.
@@ -119,6 +120,35 @@ describe('the queue', () => {
       result.results.some((r) => r.blocking.length > 0),
       'the fixture with a required question should report something blocking',
     );
+  });
+
+  it('fills radios, checkboxes and shadow-DOM fields', async () => {
+    // The widgets a form engine most often cannot reach: a radio whose real
+    // input is hidden behind its label, a consent checkbox, and inputs inside
+    // open and closed shadow roots. This also guards the normalisation used to
+    // compare option text - a lost backslash there once turned /\s+/ into /s+/,
+    // which silently stripped every letter "s" and made "Yes" unmatchable.
+    // Taught first, the way a person would: the profile says "US Citizen" and
+    // the form offers Yes or No, which is exactly the gap the answer bank
+    // exists to close. Without this the application parks, and rightly so.
+    const bank = db.openStore(resolve(dataDir, 'mapply.db'));
+    db.putAnswer(bank, {
+      questionKey: questionKey('Are you legally authorized to work in the United States?'),
+      questionText: 'Are you legally authorized to work in the United States?',
+      answer: 'Yes',
+      source: 'human',
+      approved: true,
+    });
+    await bank.close();
+
+    await seed('greenhouse-widgets', 'Contoso');
+    const result = await mod.runQueue({ limit: 5, headless: true });
+
+    const run = result.results.find((r) => r.company === 'Contoso');
+    assert.ok(run, 'the widgets application should have been attempted');
+    assert.deepEqual(run.blocking, [], `nothing should block: ${run.blocking.join('; ')}`);
+    assert.equal(run.verified, run.filled, 'every field it wrote should verify');
+    assert.ok(run.filled >= 7, `expected the widget fields to be filled, got ${run.filled}`);
   });
 
   it('leaves nothing claimable once it has worked the queue', async () => {

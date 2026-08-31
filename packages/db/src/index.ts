@@ -13,6 +13,7 @@ import type { Database } from './schema';
 export type { Database } from './schema';
 export * from './schema';
 export * from './answers';
+export * from './templates';
 
 export interface Store {
   db: Kysely<Database>;

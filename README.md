@@ -94,6 +94,11 @@ signing; a plausible guess on one is not a small thing.
 The parts that exist because getting them wrong is expensive:
 
 - **Dry run is the default.** `--submit` has to be asked for.
+- **A form must earn the right to submit itself.** Each form's shape gets a
+  fingerprint, and it may only auto-submit after three consecutive clean runs;
+  one park or failure spends that entirely. When an ATS changes its markup the
+  fingerprint changes with it, so the worst case is applications queueing for
+  review rather than going out wrong.
 - **Nothing is trusted after it is written.** Every field is read back, and the
   whole form is re-read once more before submitting — because uploading a resume
   makes some ATSs re-render and quietly empty fields that were correct a moment
@@ -108,6 +113,12 @@ The parts that exist because getting them wrong is expensive:
 - **Waived, not ignored.** When a form says a field is optional in practice — as
   Greenhouse does when its location service is down — that is recorded on the
   application, not skipped silently.
+- **Hosts are paced, and left alone when they object.** Requests to one host are
+  spaced with jitter; five failures running puts it in cooldown rather than
+  working the whole queue against a host that is refusing.
+- **A CAPTCHA or a login wall is parked, not failed.** No machine gets past
+  those, but the person sitting at this browser clears one in seconds — and a
+  failed application is written off where a parked one is waiting for help.
 
 ## Layout
 
@@ -131,10 +142,12 @@ break one of them.
 npm test --workspaces
 ```
 
-The form engine is tested against saved fixtures in
-`packages/filler/test/fixtures`, including an embedded-iframe form and one with an
-unanswerable required question, so a change that breaks label attribution or the
-parking rules fails locally rather than on someone's real application.
+The form engine is tested against saved fixtures in `packages/filler/test/fixtures`:
+an ordinary form, one embedded in an iframe, one with an unanswerable required
+question, and one built from the widgets that usually defeat a filler — a radio
+whose real input hides behind its label, a consent checkbox, and inputs inside
+open and closed shadow roots. A change that breaks label attribution, the
+parking rules or the trust gate fails locally rather than on a real application.
 
 ## What it does not do
 
@@ -143,4 +156,8 @@ parking rules fails locally rather than on someone's real application.
 - **Handle every ATS.** Greenhouse is templated; others fall back to the generic
   engine and park more often. `mapply status` shows what came back
   `unsupported_ats` — that is the list of what to template next.
+- **Read a calendar widget.** Native date inputs and masked text boxes are
+  handled, including matching the order the box asks for; a pop-up calendar
+  parks. Writing a date in the wrong order is not rejected, it is accepted as
+  the wrong day, so it declines rather than guesses.
 - **Answer for you.** It fills what it can prove; the rest is yours.

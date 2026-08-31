@@ -82,5 +82,11 @@ export interface FormTemplate {
    */
   waivableErrors?: RegExp;
   submitSelector: string;
+  /**
+   * The control that advances a multi-step form. Absent for single-page ones,
+   * which is most of them - and absent is the safe default, since a wrong guess
+   * here means clicking something that was never meant to be clicked.
+   */
+  nextSelector?: string;
   confirm: ConfirmSpec;
 }

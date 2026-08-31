@@ -183,7 +183,7 @@ function pick(options: string[], wanted: string, fallback?: RegExp, allowFirst =
  *   like, so that check fails precisely when the pick worked.
  */
 async function committed(input: Locator, chosen: string): Promise<boolean> {
-  const wanted = chosen.replace(/s+/g, ' ').trim().toLowerCase();
+  const wanted = chosen.replace(/\s+/g, ' ').trim().toLowerCase();
 
   const shown = await input
     .evaluate((element) => {
@@ -198,7 +198,7 @@ async function committed(input: Locator, chosen: string): Promise<boolean> {
     })
     .catch(() => null);
 
-  const text = shown?.replace(/s+/g, ' ').trim().toLowerCase() ?? null;
+  const text = shown?.replace(/\s+/g, ' ').trim().toLowerCase() ?? null;
   if (text && text.includes(wanted)) return true;
 
   // The menu closed and the control is no longer showing nothing. Weaker, but it

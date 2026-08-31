@@ -8,6 +8,7 @@ export type ControlKind =
   | 'checkbox'
   | 'radiogroup'
   | 'file'
+  | 'date'
   | 'other';
 
 export interface DiscoveredField {
@@ -66,10 +67,19 @@ export async function discoverFields(
     const text = (node: Element | null): string =>
       (node?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
+    // Walks into shadow roots as well as the light DOM. querySelectorAll stops at
+    // the boundary, so a component that renders its input inside a shadow root -
+    // which is most design systems now - is otherwise simply not there.
     const found = new Set<Element>();
-    for (const scope of scopes) {
-      for (const element of Array.from(scope.querySelectorAll(CONTROLS))) found.add(element);
-    }
+    const collect = (root: ParentNode, depth: number): void => {
+      if (depth > 20) return;
+      for (const element of Array.from(root.querySelectorAll('*'))) {
+        if (element.matches?.(CONTROLS)) found.add(element);
+        const shadow = (element as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+        if (shadow) collect(shadow, depth + 1);
+      }
+    };
+    for (const scope of scopes) collect(scope, 0);
 
     const controls = Array.from(found).filter((element) => {
       const input = element as HTMLInputElement;
@@ -157,15 +167,40 @@ export async function discoverFields(
       if (type === 'checkbox') return 'checkbox';
       if (type === 'radio') return 'radiogroup';
       if (type === 'file') return 'file';
+      if (type === 'date' || type === 'month') return 'date';
       if (element.hasAttribute('aria-haspopup') || element.hasAttribute('aria-autocomplete')) {
         return 'combobox';
       }
       return 'text';
     };
 
+    // One entry per radio group, not per radio. A radio's own label is the option
+    // text - "Yes", "No" - and treating each as a separate question asks the
+    // wrong thing four times over. The question is on the fieldset around them.
+    const radioGroups = new Map<string, Element[]>();
+    for (const field of controls) {
+      if ((field as HTMLInputElement).type !== 'radio') continue;
+      const name = (field as HTMLInputElement).name || 'unnamed';
+      const group = radioGroups.get(name) ?? [];
+      group.push(field);
+      radioGroups.set(name, group);
+    }
+    const leadOfGroup = new Set([...radioGroups.values()].map((group) => group[0]));
+
+    const groupQuestion = (member: Element): string => {
+      const legend = member.closest('fieldset')?.querySelector('legend');
+      if (legend) return text(legend);
+      const group = member.closest('[role="radiogroup"], [role="group"]');
+      const labelledBy = group?.getAttribute('aria-labelledby');
+      if (labelledBy) return text(document.getElementById(labelledBy));
+      return text(group?.querySelector('label, .label') ?? null) || '';
+    };
+
     let counter = 0;
     const out: unknown[] = [];
     for (const field of controls) {
+      const isRadio = (field as HTMLInputElement).type === 'radio';
+      if (isRadio && !leadOfGroup.has(field)) continue;
       const pair = assigned.get(field);
       if (!pair) continue;
 
@@ -174,6 +209,8 @@ export async function discoverFields(
 
       const input = field as HTMLInputElement;
       const kind = kindOf(field);
+      const members = isRadio ? (radioGroups.get(input.name || 'unnamed') ?? [field]) : [];
+      const question = isRadio ? groupQuestion(field) : '';
       const required =
         input.required ||
         field.getAttribute('aria-required') === 'true' ||
@@ -181,19 +218,25 @@ export async function discoverFields(
 
       out.push({
         ref,
-        label: pair.text.replace(/\s*\*\s*$/, '').trim(),
+        label: (question || pair.text).replace(/\s*\*\s*$/, '').trim(),
         labelSource: pair.source,
         labelScore: pair.score,
         control: kind,
         required,
-        hasValue:
-          kind === 'checkbox'
+        hasValue: isRadio
+          ? members.some((member) => (member as HTMLInputElement).checked)
+          : kind === 'checkbox'
             ? input.checked
             : kind === 'select'
               ? (field as unknown as HTMLSelectElement).selectedIndex > 0
               : Boolean(input.value),
-        options:
-          kind === 'select'
+        options: isRadio
+          ? members.map((member) => {
+              const id = member.getAttribute('id');
+              const own = id ? document.querySelector(`label[for="${id.replace(/"/g, '\\"')}"]`) : null;
+              return text(own) || text(member.closest('label')) || (member as HTMLInputElement).value;
+            }).filter(Boolean)
+          : kind === 'select'
             ? Array.from((field as unknown as HTMLSelectElement).options)
                 .filter((option) => option.value !== '')
                 .map((option) => option.text.replace(/\s+/g, ' ').trim())
