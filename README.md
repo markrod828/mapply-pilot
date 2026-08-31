@@ -35,8 +35,8 @@ npx playwright install chromium      # optional: your installed Chrome is used f
 orchestrator*, then:
 
 ```bash
-npx tsx apps/orchestrator/src/cli.ts import ~/Downloads/mapply-identity-*.json
-npx tsx apps/orchestrator/src/cli.ts whoami
+npm run mapply -- import ~/Downloads/mapply-identity-*.json
+npm run mapply -- whoami
 ```
 
 **2. Turn on scoring and tailoring** (optional — without a key it sends your base
@@ -52,15 +52,15 @@ crawl will tell you if the session has lapsed; it never attempts a login itself.
 **4. Fill the queue and work it.**
 
 ```bash
-npx tsx apps/orchestrator/src/cli.ts crawl --limit 25
-npx tsx apps/orchestrator/src/cli.ts run --limit 10        # dry run
-npx tsx apps/orchestrator/src/cli.ts run --limit 10 --submit
+npm run mapply -- crawl --limit 25
+npm run mapply -- run --limit 10        # dry run
+npm run mapply -- run --limit 10 --submit
 ```
 
 **5. Clear what stopped.**
 
 ```bash
-npx tsx apps/orchestrator/src/cli.ts dashboard             # http://127.0.0.1:4600
+npm run dashboard                        # http://127.0.0.1:4600
 ```
 
 ## Commands
@@ -76,6 +76,10 @@ npx tsx apps/orchestrator/src/cli.ts dashboard             # http://127.0.0.1:46
 | `answer "<question>" "<answer>"` | Teach it one, reused everywhere after |
 | `bank` | What it has been taught |
 | `status` · `recover` · `dashboard` | Recent applications · re-queue abandoned work · review UI |
+
+Every command is run from the repo root as `npm run mapply -- <command>`; the
+`--` is what stops npm swallowing the flags. The review UI has its own shortcut,
+`npm run dashboard`.
 
 ## The answer bank
 
