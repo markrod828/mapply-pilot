@@ -129,3 +129,22 @@ describe('formatDateFor', () => {
     assert.equal(formatDateFor('MM/DD/YYYY', ''), null);
   });
 });
+
+describe('equivalent, phone country codes', () => {
+  it('accepts a form that kept only the national number', () => {
+    // The form puts the country code in its own picker and reformats what is
+    // left. The number was written correctly; only the shape came back changed.
+    assert.ok(equivalent('5586659856', '+1 (558) 665-9856', 'digits'));
+    assert.ok(equivalent('+1 (558) 665-9856', '5586659856', 'digits'));
+  });
+
+  it('still rejects a different number', () => {
+    assert.ok(!equivalent('5586659857', '+1 (558) 665-9856', 'digits'));
+    assert.ok(!equivalent('4155550000', '+1 (558) 665-9856', 'digits'));
+  });
+
+  it('will not call a short fragment a match', () => {
+    // Without a length floor, "9856" would match any number ending in it.
+    assert.ok(!equivalent('9856', '+1 (558) 665-9856', 'digits'));
+  });
+});

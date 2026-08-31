@@ -19,7 +19,20 @@ const NORMALISE: Record<Comparator, (value: string) => string> = {
 
 export function equivalent(got: string, want: string, comparator: Comparator = 'loose'): boolean {
   const normalise = NORMALISE[comparator];
-  return normalise(got) === normalise(want);
+  const a = normalise(got);
+  const b = normalise(want);
+  if (a === b) return true;
+
+  // A phone box commonly keeps the national number and puts the country code in
+  // a picker of its own, so what is read back is the tail of what was written.
+  // Comparing by suffix accepts that without accepting two different numbers:
+  // the shared part still has to be long enough to identify one.
+  if (comparator === 'digits' && a && b) {
+    const shorter = a.length < b.length ? a : b;
+    const longer = a.length < b.length ? b : a;
+    return shorter.length >= 7 && longer.endsWith(shorter);
+  }
+  return false;
 }
 
 export type WriteStrategy = 'fill' | 'type' | 'nativeSet';
