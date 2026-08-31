@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { listAnswers, openStore, putAnswer, recoverStaleLeases } from '@mapply/db';
 import { questionKey } from '@mapply/filler';
@@ -61,12 +63,25 @@ async function main(): Promise<void> {
   }
 }
 
+/**
+ * Expands a leading `~` and makes the path absolute.
+ *
+ * PowerShell and cmd pass `~` through untouched, so a path that works in every
+ * shell the docs might be read in arrives here as a literal directory name and
+ * fails with a bewildering error about a folder called `~`.
+ */
+function resolvePath(input: string): string {
+  const expanded = input.startsWith('~') ? input.replace(/^~/, homedir()) : input;
+  return isAbsolute(expanded) ? expanded : resolve(process.cwd(), expanded);
+}
+
 function doImport(file: string | undefined): void {
   if (!file) throw new Error('Usage: mapply import <file.json>');
+  const path = resolvePath(file);
   ensureDataDirs();
   const store = openStore(paths.database);
   try {
-    const exported = JSON.parse(readFileSync(file, 'utf8')) as IdentityExport;
+    const exported = JSON.parse(readFileSync(path, 'utf8')) as IdentityExport;
     const identity = importIdentity(store, exported);
     console.log('Imported:');
     console.log(describeIdentity(identity));
