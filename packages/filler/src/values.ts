@@ -17,7 +17,7 @@ export type ValueKey =
   | 'fullAddress' | 'location'
   | 'currentTitle' | 'yearsExperience' | 'salaryExpectation' | 'noticePeriod'
   | 'availableStartDate'
-  | 'workAuthorization' | 'requiresSponsorship' | 'willingToRelocate' | 'workPreference'
+  | 'nationality' | 'workAuthorization' | 'requiresSponsorship' | 'willingToRelocate' | 'workPreference'
   | 'gender' | 'ethnicity' | 'veteranStatus' | 'disabilityStatus'
   | 'referralSource' | 'previouslyEmployed' | 'isOver18'
   | 'hasRelativesAtCompany' | 'relativesDetail' | 'agreeToTerms'
@@ -90,6 +90,7 @@ export function resolveValue(key: ValueKey, ctx: FillContext): string {
     case 'noticePeriod': return p.noticePeriod;
     case 'availableStartDate': return p.availableStartDate;
 
+    case 'nationality': return p.nationality;
     case 'workAuthorization': return p.workAuthorization;
     case 'requiresSponsorship': return yesNo(p.requiresSponsorship);
     case 'willingToRelocate': return yesNo(p.willingToRelocate);

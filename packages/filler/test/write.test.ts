@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { formatDateFor } from '../src/dates';
+import { matchRule } from '../src/rules';
 import { equivalent } from '../src/write';
 import { comparatorFor, resolveValue, type FillContext } from '../src/values';
 import type { Profile } from '@mapply/core';
@@ -146,5 +147,28 @@ describe('equivalent, phone country codes', () => {
   it('will not call a short fragment a match', () => {
     // Without a length floor, "9856" would match any number ending in it.
     assert.ok(!equivalent('9856', '+1 (558) 665-9856', 'digits'));
+  });
+});
+
+describe('nationality vs country of residence', () => {
+  const ask = (label: string) => matchRule(label, 'text')?.key;
+
+  it('reads a citizenship question as nationality', () => {
+    // "Country of citizenship" contains the word country, so rule order is what
+    // decides this. Answering it with where you live is wrong, not imprecise.
+    assert.equal(ask('Nationality'), 'nationality');
+    assert.equal(ask('Citizenship'), 'nationality');
+    assert.equal(ask('Country of citizenship'), 'nationality');
+    assert.equal(ask('What country are you a citizen of?'), 'nationality');
+  });
+
+  it('still reads an address question as country', () => {
+    assert.equal(ask('Country'), 'country');
+    assert.equal(ask('Country of residence'), 'country');
+  });
+
+  it('leaves work-eligibility questions to their own rules', () => {
+    assert.equal(ask('Are you legally authorized to work in this country?'), 'workAuthorization');
+    assert.equal(ask('Will you require visa sponsorship?'), 'requiresSponsorship');
   });
 });

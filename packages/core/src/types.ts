@@ -50,6 +50,13 @@ export interface Profile {
   portfolio: string;
   currentTitle: string;
   yearsExperience: string;
+  /**
+   * Citizenship, as a form asks it: "Nationality", "Citizenship", "Country of
+   * citizenship". Kept apart from `address.country`, which is where you live -
+   * the two differ often enough that answering one with the other is wrong
+   * rather than merely imprecise.
+   */
+  nationality: string;
   workAuthorization: string;
   requiresSponsorship: YesNo;
   salaryExpectation: string;
@@ -343,6 +350,7 @@ export const EMPTY_PROFILE: Profile = {
   portfolio: '',
   currentTitle: '',
   yearsExperience: '',
+  nationality: '',
   workAuthorization: '',
   requiresSponsorship: '',
   salaryExpectation: '',

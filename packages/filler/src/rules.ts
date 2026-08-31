@@ -58,10 +58,17 @@ export const LABEL_RULES: readonly LabelRule[] = [
     exclude: /relocat|willing|open to|prefer|commut/,
   },
   { key: 'state', test: /\bstate\b|province|\bregion\b/, exclude: /united states/ },
+  // Before `country`, and no longer sharing its pattern. "Country of
+  // citizenship" contains the word country, so whichever rule is tested first
+  // takes it - and the one that should win is the one about citizenship.
+  {
+    key: 'nationality',
+    test: /nationality|citizenship|country of citizen|citizen of/,
+  },
   {
     key: 'country',
-    test: /\bcountry\b|nation(ality)?/,
-    exclude: /sponsor|visa|authoriz|permit|citizen|eligib/,
+    test: /\bcountry\b/,
+    exclude: /sponsor|visa|authoriz|permit|citizen|nationality|eligib/,
   },
   {
     key: 'location',

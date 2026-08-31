@@ -97,6 +97,12 @@ const SECTIONS: SectionSpec[] = [
     id: 'eligibility',
     title: 'Work eligibility',
     fields: [
+      {
+        key: 'nationality',
+        label: 'Nationality',
+        placeholder: 'United States',
+        suggestions: ['United States', 'Canada', 'United Kingdom', 'India', 'Australia', 'Germany'],
+      },
       { key: 'workAuthorization', label: 'Work authorization', placeholder: 'Yes' },
       { key: 'requiresSponsorship', label: 'Needs visa sponsorship', choices: YES_NO },
     ],
