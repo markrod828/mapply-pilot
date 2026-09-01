@@ -6,5 +6,6 @@
  * those ambiguous.
  */
 export * from './types';
+export * from './jobChat';
 export * from './ports';
 export * from './application';

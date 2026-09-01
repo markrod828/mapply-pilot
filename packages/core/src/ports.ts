@@ -17,7 +17,8 @@ export type LlmPurpose =
   | 'answer'
   | 'cover_letter'
   | 'parse_resume'
-  | 'map_form';
+  | 'map_form'
+  | 'chat';
 
 export interface LlmRequest {
   purpose: LlmPurpose;

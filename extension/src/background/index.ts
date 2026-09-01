@@ -1,5 +1,6 @@
 import { scoreResume } from '@mapply/core/atsScore';
 import { generateCoverLetter } from '@mapply/core/coverLetter';
+import { askAboutJob } from '@mapply/core/jobChat';
 import { DEFAULT_RESUME_FILE, blobToBase64, getFile, tailoredResumeFile } from '../lib/db';
 import { hasHostAccess, originFor } from '../lib/hosts';
 import type { LlmPort } from '@mapply/core';
@@ -79,6 +80,13 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'GET_AUTOFILL_PAYLOAD':
       return buildAutofillPayload();
+
+    case 'REQUEST_CHAT':
+      return runChat(message.jobKey, message.question);
+
+    case 'CLEAR_CHAT':
+      await updateJob(message.jobKey, (record) => ({ ...record, chat: [] }));
+      return { ok: true };
 
     case 'REQUEST_ANSWERS':
       return runAnswers(message.questions);
@@ -161,6 +169,50 @@ async function onJobCaptured(job: JobPosting, tabId?: number) {
     else await clearBadge(tabId);
   }
   return { ok: true, score: known };
+}
+
+/**
+ * Answers a question about the open posting.
+ *
+ * Both turns are written together once the reply is in. Recording the question
+ * before the answer arrives would leave a half-conversation behind whenever a
+ * call fails, and the next question would then be answered against a thread
+ * containing a question nobody ever answered.
+ */
+async function runChat(jobKey: string, question: string) {
+  const settings = await getSettings();
+  if (!settings.openaiApiKey) return { ok: false, error: 'No OpenAI API key set.' };
+
+  const record = await getJob(jobKey);
+  if (!record) return { ok: false, error: 'That job is no longer cached. Reopen it on Jobright.' };
+
+  const resume = await getResume();
+  if (!resume?.text) return { ok: false, error: 'Upload your default resume first.' };
+
+  try {
+    const reply = await askAboutJob({
+      llm: llmFor(settings),
+      model: settings.scoreModel,
+      job: record.job,
+      resumeText: resume.text,
+      profile: await getProfile(),
+      history: record.chat ?? [],
+      question,
+    });
+
+    const now = Date.now();
+    const updated = await updateJob(jobKey, (current) => ({
+      ...current,
+      chat: [
+        ...(current.chat ?? []),
+        { role: 'you' as const, text: question, at: now },
+        { role: 'assistant' as const, text: reply, at: Date.now() },
+      ],
+    }));
+    return { ok: true, reply, chat: updated?.chat ?? [] };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
 }
 
 function jobFingerprint(job: Pick<JobPosting, 'title' | 'description'>): string {

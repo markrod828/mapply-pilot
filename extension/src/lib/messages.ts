@@ -49,6 +49,8 @@ export type Message =
   | { type: 'GET_AUTOFILL_PAYLOAD' }
   | { type: 'RUN_AUTOFILL'; tabId: number }
   | { type: 'REQUEST_ANSWERS'; questions: FormQuestion[] }
+  | { type: 'REQUEST_CHAT'; jobKey: string; question: string }
+  | { type: 'CLEAR_CHAT'; jobKey: string }
   | { type: 'STATE_CHANGED' };
 
 export interface ScoreResponse {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { setSettings } from '../lib/storage';
 import { EMPTY_PROFILE, DEFAULT_SETTINGS, type Theme } from '@mapply/core/types';
+import { ChatPanel } from './components/ChatPanel';
 import { JobPanel } from './components/JobPanel';
 import { ProfileForm } from './components/ProfileForm';
 import { ResumePanel } from './components/ResumePanel';
@@ -8,10 +9,11 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { useAppState } from './hooks';
 import { applyTheme, nextTheme, systemTheme } from './theme';
 
-type Tab = 'job' | 'resume' | 'profile' | 'settings';
+type Tab = 'job' | 'chat' | 'resume' | 'profile' | 'settings';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'job', label: 'Job' },
+  { id: 'chat', label: 'Ask' },
   { id: 'resume', label: 'Resume' },
   { id: 'profile', label: 'Profile' },
   { id: 'settings', label: 'Settings' },
@@ -95,6 +97,15 @@ export function App() {
           <JobPanel
             record={state.activeJob}
             profile={profile}
+            resume={state.resume}
+            settings={settings}
+            onGoToSettings={() => setTab('settings')}
+            onGoToResume={() => setTab('resume')}
+          />
+        )}
+        {tab === 'chat' && (
+          <ChatPanel
+            record={state.activeJob}
             resume={state.resume}
             settings={settings}
             onGoToSettings={() => setTab('settings')}

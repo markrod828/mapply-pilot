@@ -299,6 +299,13 @@ export interface GeneratedAnswer {
   answer: string;
 }
 
+/** One line of a conversation about a posting. */
+export interface ChatTurn {
+  role: 'you' | 'assistant';
+  text: string;
+  at: number;
+}
+
 export interface JobRecord {
   job: JobPosting;
   /** Screening answers written for this job's application form. */
@@ -307,6 +314,14 @@ export interface JobRecord {
   tailoredScore?: AtsScore;
   tailored?: TailoredResume;
   coverLetter?: CoverLetter;
+  /**
+   * Questions asked about this posting, oldest first.
+   *
+   * Kept per job rather than globally: a question about one role means nothing
+   * against another, and threading them together would send the wrong posting
+   * as context.
+   */
+  chat?: ChatTurn[];
   /** Hash of the resume text used for baseScore, so stale caches are refreshed. */
   baseResumeHash?: string;
 }
