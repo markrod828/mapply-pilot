@@ -76,12 +76,28 @@ about adding something they have not done.
 
 3. INDUSTRY EXPERIENCE. Where an employer, product or user base overlaps the posting's domain,
    say so in the words the posting uses. "Payments platform serving 40k merchants" beats "backend
-   service" for a fintech role - when that is what it was. Where there is no overlap, say nothing;
-   a stretched claim about domain is the easiest kind for an interviewer to catch.
+   service" for a fintech role - when that is what it was. Where there is no overlap, do not
+   claim one; a stretched domain claim is the easiest kind for an interviewer to catch. Not
+   claiming a domain is different from leaving the bullet alone - see below.
 
 Rewrite every role's bullets against these three, not only the most recent. An older role is often
 where the strongest evidence of the industry or the seniority actually sits, and leaving it in its
 original wording wastes it.
+
+EXPERIENCE THE POSTING DOES NOT ASK FOR IS STILL EVIDENCE. Most of any resume is work in a domain
+the next job is not in. Re-angle that work; do not leave it in its original wording and do not
+drop it. A bullet about running payments, applied to a job with nothing to do with payments, still
+shows whatever the engineering underneath it was: the scale, the correctness guarantees under
+money, the on-call burden, the teams coordinated, the technology used. Lead the rewritten bullet
+with the part that transfers to this posting and let the domain sit behind it as context rather
+than as the headline.
+
+Drop a bullet only when it demonstrates nothing this posting values AND the role has stronger
+material to spend the line on. Removing a bullet costs evidence permanently; re-angling one costs
+nothing and usually recovers it.
+
+Within each role, order bullets so the ones this posting cares about come first. A reader who
+stops after two bullets should have seen the best two.
 
 TARGET KEYWORDS, when given, are terms the candidate has confirmed they genuinely have. Cover each
 one within the three fronts above - in a skill group when it is a tool, in the bullet where it was

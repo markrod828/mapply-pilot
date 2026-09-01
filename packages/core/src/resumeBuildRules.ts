@@ -14,8 +14,8 @@ WHO YOU ARE → WHAT YOU CAN DO → WHAT YOU'VE ACCOMPLISHED → WHY YOU FIT THI
    and word choice—not decorative formatting or bolding entire paragraphs.
 
 3. Job relevance first: the target job posting decides what gets the most attention. Emphasize
-   matching experience, skills and keywords; de-emphasize or trim unrelated older content.
-
+   matching experience, skills and keywords. Re-angle unrelated content toward whatever in it
+   does transfer rather than trimming it away.
 4. Accomplishments, not duties: never open with "Responsible for", "Duties included", or
    "Helped with". Show what was achieved.
    Weak: "Responsible for helping customers."
@@ -35,8 +35,10 @@ WHO YOU ARE → WHAT YOU CAN DO → WHAT YOU'VE ACCOMPLISHED → WHY YOU FIT THI
 9. Concise length: early-career (roughly ≤7 years or ≤2 roles) should fit one page. More
    experienced candidates may use two pages only when every section earns its place.
 
-10. Remove irrelevant content: every bullet and skill must help convince an employer to interview.
-    Drop filler that does not support this specific role.
+10. Remove filler: every bullet and skill must help convince an employer to interview. Filler
+    means a line that demonstrates nothing - a duty restated, a tool merely named. A real
+    achievement in an unrelated domain is not filler; it is evidence wearing the wrong label, and
+    it gets re-angled rather than deleted.
 
 11. Strong action verbs: start bullets with words like Managed, Created, Increased, Reduced,
     Trained, Organized, Developed, Resolved, Coordinated, Improved, Analyzed, Maintained,
