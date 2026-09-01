@@ -58,12 +58,36 @@ software-engineering resume that also ranks well in an ATS keyword screen - with
 
 ${RESUME_BUILD_RULES}
 
-Your main job is keyword coverage. The candidate has picked the TARGET KEYWORDS they want added and
-has confirmed they genuinely have them. For each target keyword:
-- Place the exact term in the matching skill group when it is a skill or tool.
-- Rewrite the most relevant bullet or the summary to use the job's exact term.
-- If covering it would require inventing unsupported facts, leave it out and report it in
-  omittedKeywords with a short reason.
+Rewrite the resume so it answers this specific posting on three fronts, together. Each one is
+about surfacing what the candidate has already done, in the job's own terms. None of them is ever
+about adding something they have not done.
+
+1. EXPERIENCE LEVEL. The posting asks for a seniority; the resume has to read at that level, or
+   make clear it exceeds it. Lead bullets with the scope the candidate genuinely owned - the
+   system, the team, the users, the money, what broke if they got it wrong - rather than the task
+   performed. Where the resume shows leadership, put it in the verb: led, owned, drove. Where it
+   does not, do not imply it. A senior posting met with task-shaped bullets reads as junior even
+   when the person is not.
+
+2. SKILLS. Every technology the posting names that the candidate has actually used belongs in the
+   skill groups AND in the bullet where they used it. A skill listed but never demonstrated reads
+   as filler to a person and matches thinly to a screen. Use the posting's exact spelling where
+   the difference is only style.
+
+3. INDUSTRY EXPERIENCE. Where an employer, product or user base overlaps the posting's domain,
+   say so in the words the posting uses. "Payments platform serving 40k merchants" beats "backend
+   service" for a fintech role - when that is what it was. Where there is no overlap, say nothing;
+   a stretched claim about domain is the easiest kind for an interviewer to catch.
+
+Rewrite every role's bullets against these three, not only the most recent. An older role is often
+where the strongest evidence of the industry or the seniority actually sits, and leaving it in its
+original wording wastes it.
+
+TARGET KEYWORDS, when given, are terms the candidate has confirmed they genuinely have. Cover each
+one within the three fronts above - in a skill group when it is a tool, in the bullet where it was
+used when it is work. If covering one would need a fact the resume does not support, leave it out
+and report it in omittedKeywords with a short reason. An empty list is not a reason to make fewer
+changes; it only means nobody named terms in advance.
 
 Prefer opening bullets with strong action verbs such as: ${ACTION_VERBS.slice(0, 12).join(', ')}.
 
@@ -172,8 +196,8 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
     sections.skills && 'Skills (grouped categories)',
     sections.workExperience &&
       (workExperienceDepth === 'quick'
-        ? 'Work Experience (rewrite titles/bullets for the two most recent roles; keep older role bullets truthful and within density caps; NEVER drop any role)'
-        : 'Work Experience (rewrite titles/bullets for every role within density caps; NEVER drop any role)'),
+        ? "Work Experience (rewrite every role's bullets against the three fronts; deepest on the two most recent, tighter on older ones; NEVER drop any role)"
+        : "Work Experience (rewrite every role's bullets against the three fronts, in full depth; NEVER drop any role)"),
     sections.projects && 'Projects (2-3 bullets each)',
   ].filter(Boolean) as string[];
 
@@ -214,6 +238,8 @@ export async function tailorResume(request: TailorRequest): Promise<TailoredResu
     targets.map((keyword) => `- ${keyword}`).join('\n') || '- none',
     '',
     `UNMET MUST-HAVES: ${request.baseScore?.mustHaveGaps.join(', ') || 'none'}`,
+    '',
+    ...weakestFronts(request.baseScore),
     '',
     pageLengthHint(skeleton.length),
     ...lockedSkeleton,
@@ -600,6 +626,42 @@ function toExperience(value: unknown): ExperienceEntry[] {
 }
 
 /** Target bullet count label for prompts, and hard max for reconciliation. */
+/**
+ * Hands the rewrite the scorer's own findings about this resume.
+ *
+ * Without it the model has to rediscover the gaps from the two documents, and
+ * it tends to spread its effort evenly instead. The score already knows which
+ * of the three fronts is weakest - naming them is the difference between a
+ * rewrite that polishes everything a little and one that fixes what is wrong.
+ *
+ * Only the rows that are not already a match are sent. Telling it what is
+ * fine invites it to change something that was working.
+ */
+function weakestFronts(score: AtsScore | undefined): string[] {
+  if (!score) return [];
+
+  const gaps = score.comparison
+    .filter((row) => row.status !== 'match')
+    .map(
+      (row) =>
+        `- ${row.label}: the job wants "${row.jobValue}", this resume shows "${row.resumeValue}" (${row.status})`,
+    );
+
+  const buckets = [
+    `- Skills overlap scored ${score.buckets.skillsOverlap}/100`,
+    `- Title and experience alignment scored ${score.buckets.titleExperienceAlignment}/100`,
+    `- Keyword coverage scored ${score.buckets.keywordCoverage}/100`,
+  ];
+
+  return [
+    'WHERE THIS RESUME IS WEAKEST AGAINST THIS POSTING (from a prior review of it):',
+    ...gaps,
+    ...buckets,
+    'Fix these with real material from the resume. A front that cannot be improved',
+    'truthfully stays as it is - say so in changeNotes rather than inventing a way to close it.',
+  ];
+}
+
 export function bulletCapForRole(index: number): number {
   if (index === 0) return 8;
   if (index === 1) return 6;

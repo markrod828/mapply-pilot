@@ -95,8 +95,8 @@ export function AlignStep({ score, options, onChange, onBack, onGenerate, pendin
                     />
                     <span>
                       {depth === 'quick'
-                        ? 'Quick edit (deep rewrite on 2 most recent; keep all roles)'
-                        : 'Full edit (rewrite every role; keep all companies & dates)'}
+                        ? 'Quick edit (rewrite every role, deepest on the 2 most recent)'
+                        : 'Full edit (rewrite every role at full depth)'}
                     </span>
                   </label>
                 ))}
